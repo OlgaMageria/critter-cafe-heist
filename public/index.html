@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Critter Cafe Heist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#4a3328;--card:#fffdf8;--pink:#ffb3c6;--mint:#a8e6cf;--sky:#b5dcff;--butter:#ffe9a8;--tomato:#ff6b6b}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:'Fredoka','Trebuchet MS',system-ui,sans-serif;color:var(--ink);min-height:100vh;
+  background:radial-gradient(circle at 15% 8%,#ffd9e6 0,transparent 38%),radial-gradient(circle at 88% 18%,#d6efff 0,transparent 38%),
+  radial-gradient(rgba(255,255,255,.7) 3px,transparent 3px) 0 0/30px 30px,#fff1de;}
+#app{max-width:1180px;margin:0 auto;padding:14px 16px 40px}
+.hidden{display:none!important}
+.brand{display:flex;align-items:center;gap:10px;justify-content:center;margin:6px 0 14px}
+.brand h1{margin:0;font-size:34px;letter-spacing:.5px}
+.brand .logo{font-size:34px}
+.card{background:var(--card);border:3px solid var(--ink);border-radius:20px;box-shadow:0 6px 0 rgba(74,51,40,.25);padding:16px}
+.card h3{margin:0 0 8px;font-size:20px}
+.btn{font:inherit;font-weight:600;font-size:18px;padding:10px 22px;border-radius:14px;border:3px solid var(--ink);background:var(--butter);color:var(--ink);cursor:pointer;box-shadow:0 4px 0 var(--ink);transition:transform .05s}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+.btn.primary{background:var(--mint)}
+.btn.ghost{background:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+input[type=text]{font:inherit;font-size:20px;padding:10px 14px;border-radius:14px;border:3px solid var(--ink);width:100%;background:#fff;color:var(--ink)}
+.center{max-width:560px;margin:0 auto}
+.avatars{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:12px 0 16px}
+.av{font-size:30px;padding:6px 0;border-radius:14px;border:3px solid transparent;background:#fff;cursor:pointer}
+.av.sel{border-color:var(--ink);background:var(--pink);box-shadow:0 3px 0 var(--ink)}
+.roster{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 16px}
+.chip{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:3px solid var(--ink);background:#fff;font-weight:600}
+.chip .em{font-size:22px}
+.chip.off{opacity:.45}
+.chip.runner{background:var(--pink)}
+.linkbox{display:flex;gap:8px;margin:8px 0 14px}
+.linkbox input{font-size:16px}
+.rules{margin:14px 0 0;padding-left:20px;line-height:1.5}
+.rules li{margin-bottom:6px}
+.sub{margin:0 0 10px;color:#7a5c4d}
+.note{margin:10px 0 0;font-size:15px;color:#7a5c4d}
+
+/* game */
+.hud{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.hud .role{font-weight:700;font-size:20px;padding:8px 14px;border-radius:14px;border:3px solid var(--ink);background:var(--sky)}
+.hud .timer{font-weight:700;font-size:26px;padding:4px 14px;border-radius:14px;border:3px solid var(--ink);background:#fff;min-width:96px;text-align:center}
+.hud .alarm{flex:1;min-width:200px;display:flex;align-items:center;gap:8px;font-weight:600}
+.bar{flex:1;height:22px;border:3px solid var(--ink);border-radius:999px;background:#fff;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:#7ddf9a;transition:width .1s linear,background .2s}
+.hud .loot{font-weight:700;font-size:20px;padding:8px 14px;border-radius:14px;border:3px solid var(--ink);background:var(--butter);box-shadow:0 4px 0 var(--ink)}
+.hud .loot.got{background:#ffd54a;animation:lootpulse .9s ease-in-out infinite}
+@keyframes lootpulse{0%,100%{transform:scale(1);box-shadow:0 4px 0 var(--ink),0 0 0 0 rgba(255,200,40,.8)}50%{transform:scale(1.06);box-shadow:0 4px 0 var(--ink),0 0 18px 6px rgba(255,200,40,.85)}}
+.bigcro{font-size:44px;line-height:1;float:right;filter:drop-shadow(0 3px 0 rgba(74,51,40,.25))}
+.layout{display:grid;gap:16px;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start}
+.layout.solo{grid-template-columns:minmax(0,860px);justify-content:center}
+.layout.solo #panels{display:none}
+.panels{display:flex;flex-direction:column;gap:16px}
+canvas{width:100%;height:auto;display:block;border-radius:14px;border:3px solid var(--ink);background:#fff}
+.shared canvas{transition:box-shadow .15s}
+.shared.seen canvas{box-shadow:0 0 0 5px var(--tomato),0 0 26px 8px rgba(255,90,90,.7)}
+.clue ul{margin:6px 0 0;padding:0;list-style:none}
+.clue li{background:#fff7cf;border:3px solid var(--ink);border-radius:14px;padding:10px 14px;margin-bottom:10px;font-size:19px;font-weight:500;box-shadow:0 3px 0 rgba(74,51,40,.2)}
+.team{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;justify-content:center}
+.team .chip{font-size:14px;padding:4px 10px}
+#toast{position:fixed;top:14px;left:50%;transform:translate(-50%,-20px);opacity:0;pointer-events:none;z-index:20;
+  background:#fff;border:3px solid var(--ink);border-radius:16px;padding:10px 18px;font-weight:600;font-size:18px;
+  box-shadow:0 5px 0 rgba(74,51,40,.3);transition:all .25s;max-width:92vw;text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+.overlay{position:fixed;inset:0;background:rgba(74,51,40,.45);display:flex;align-items:center;justify-content:center;z-index:30;padding:16px}
+.overlay .card{max-width:480px;text-align:center}
+.overlay h2{font-size:34px;margin:0 0 6px}
+.overlay .btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+#conn{position:fixed;left:12px;bottom:12px;background:var(--tomato);color:#fff;font-weight:600;padding:6px 12px;border-radius:12px;border:3px solid var(--ink);z-index:40}
+.dpad{position:fixed;bottom:16px;left:16px;display:none;grid-template-columns:repeat(3,60px);grid-template-rows:repeat(3,60px);gap:6px;z-index:15;user-select:none;touch-action:none}
+.dpad button,.actbtn{font-size:26px;border-radius:16px;border:3px solid var(--ink);background:var(--butter);box-shadow:0 4px 0 var(--ink);touch-action:none}
+.actbtn{position:fixed;bottom:30px;right:20px;width:92px;height:92px;border-radius:50%;font-size:18px;font-weight:700;font-family:inherit;display:none;z-index:15;background:var(--mint)}
+body.touch .dpad.on{display:grid}
+body.touch .actbtn.on{display:block}
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  .layout #panels{order:-1}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="brand"><span class="logo">🐭🥐</span><h1>Critter Cafe Heist</h1></header>
+
+  <!-- JOIN -->
+  <section id="join" class="card center">
+    <h3>Who's sneaking in today?</h3>
+    <input id="nameInput" type="text" maxlength="14" placeholder="Your name" autocomplete="off">
+    <div class="avatars" id="avatars"></div>
+    <button id="joinBtn" class="btn primary" style="width:100%">Join the heist 🐾</button>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="lobby" class="card center hidden">
+    <h3>Waiting room</h3>
+    <p class="sub">Open Google Meet and share this link with your team:</p>
+    <div class="linkbox"><input id="linkInput" type="text" readonly><button id="copyBtn" class="btn ghost">Copy</button></div>
+    <div class="roster" id="roster"></div>
+    <div id="hostControls" class="hidden">
+      <button id="startBtn" class="btn primary" style="width:100%">Start the heist! 🥐</button>
+      <p class="note" id="soloNote"></p>
+    </div>
+    <p id="waitNote" class="note hidden">Waiting for the host to start the heist…</p>
+    <p class="note" id="ver" style="text-align:right;opacity:.6"></p>
+    <ul class="rules">
+      <li>One player is the <b>Runner</b> and sneaks around as their chosen animal. Everyone else is a specialist with a <b>private screen</b>.</li>
+      <li>📜 <b>Clue Keeper</b> has a few clues about which of the 6 cupboards hides the golden croissant. Wrong guesses make noise!</li>
+      <li>🗺️ <b>Mapper</b> sees the whole kitchen. 🔭 <b>Lookout</b> sees the guard cat's patrol.</li>
+      <li>Talk on Meet! Guide the Runner to the croissant, then out the exit before the alarm fills up. Roles rotate every round.</li>
+    </ul>
+  </section>
+
+  <!-- GAME -->
+  <section id="game" class="hidden">
+    <div class="hud">
+      <div class="role" id="roleBadge"></div>
+      <div class="timer" id="timer">4:00</div>
+      <div class="alarm"><span>🔔 Alarm</span><div class="bar"><i id="alarmFill"></i></div></div>
+      <div class="loot" id="loot">🥐 Find the croissant</div>
+    </div>
+    <div class="layout" id="layout">
+      <div class="card shared" id="sharedCard">
+        <h3>👀 What the Runner sees</h3>
+        <canvas id="shared"></canvas>
+        <p class="note" id="hint"></p>
+      </div>
+      <div class="panels" id="panels"></div>
+    </div>
+    <div class="team" id="team"></div>
+  </section>
+</div>
+
+<div id="toast"></div>
+<div id="conn" class="hidden">Reconnecting…</div>
+
+<div id="endOverlay" class="overlay hidden">
+  <div class="card">
+    <h2 id="endTitle"></h2>
+    <p id="endText" style="font-size:19px;margin:8px 0"></p>
+    <div class="btns" id="endBtns"></div>
+    <p class="note hidden" id="endWait">Waiting for the host to pick what's next…</p>
+  </div>
+</div>
+
+<div class="dpad" id="dpad">
+  <span></span><button data-k="w">▲</button><span></span>
+  <button data-k="a">◀</button><span></span><button data-k="d">▶</button>
+  <span></span><button data-k="s">▼</button><span></span>
+</div>
+<button class="actbtn" id="actBtn">OPEN</button>
+
+<script src="room.js"></script>
+<script src="render.js"></script>
+<script>
+(function () {
+  const R = window.ROOM, D = window.RENDER;
+  const $ = s => document.querySelector(s);
+  const AVATARS = ['🐭','🐹','🐰','🦊','🐼','🐨','🐸','🐵','🐧','🦝','🐻','🐯'];
+  const TYPE_LABEL = { clue: '📜 Clue Keeper', map: '🗺️ Mapper', lookout: '🔭 Lookout' };
+  if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.body.classList.add('touch');
+
+  // ----- identity (per tab, so you can test with several tabs) -----
+  let myId = sessionStorage.getItem('cch_id');
+  if (!myId) { myId = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem('cch_id', myId); }
+  let myName = localStorage.getItem('cch_name') || '';
+  let myAvatar = localStorage.getItem('cch_avatar') || AVATARS[Math.floor(Math.random() * AVATARS.length)];
+
+  // ----- state -----
+  let ws = null, joined = false, screen = 'join';
+  let lobby = null, me = null, runnerInfo = null, ended = false;
+  let S = null, V = null, panels = [];
+  const sharedCanvas = $('#shared');
+  const sharedCtx = setupCanvas(sharedCanvas);
+
+  function setupCanvas(c) {
+    c.width = D.W * 2; c.height = D.H * 2;
+    const ctx = c.getContext('2d');
+    ctx.scale(2, 2);
+    return ctx;
+  }
+  function show(name) {
+    screen = name;
+    ['join', 'lobby', 'game'].forEach(n => $('#' + n).classList.toggle('hidden', n !== name));
+  }
+
+  // ----- join screen -----
+  $('#nameInput').value = myName;
+  const avBox = $('#avatars');
+  AVATARS.forEach(a => {
+    const b = document.createElement('button');
+    b.className = 'av' + (a === myAvatar ? ' sel' : '');
+    b.textContent = a;
+    b.onclick = () => { myAvatar = a; [...avBox.children].forEach(x => x.classList.toggle('sel', x === b)); };
+    avBox.appendChild(b);
+  });
+  function doJoin() {
+    myName = ($('#nameInput').value || '').trim() || 'Critter';
+    localStorage.setItem('cch_name', myName);
+    localStorage.setItem('cch_avatar', myAvatar);
+    sessionStorage.setItem('cch_joined', '1');
+    if (joined) return;
+    joined = true;
+    connect();
+  }
+  $('#joinBtn').onclick = doJoin;
+  $('#nameInput').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+
+  // ----- connection -----
+  function send(m) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); }
+  function connect() {
+    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.onopen = () => { $('#conn').classList.add('hidden'); send({ t: 'join', id: myId, name: myName, avatar: myAvatar }); };
+    ws.onmessage = e => handle(JSON.parse(e.data));
+    ws.onclose = () => { if (joined) { $('#conn').classList.remove('hidden'); setTimeout(connect, 1500); } };
+  }
+
+  function handle(m) {
+    switch (m.t) {
+      case 'lobby':
+        lobby = m;
+        renderLobby();
+        if (m.phase === 'lobby' && screen !== 'lobby') { clearInputs(); $('#endOverlay').classList.add('hidden'); show('lobby'); }
+        if (m.phase === 'ended') renderEndButtons();
+        break;
+      case 'start': setupGame(m); break;
+      case 's': onState(m); break;
+      case 'toast': toast(m.text); break;
+      case 'end': showEnd(m); break;
+    }
+  }
+
+  // ----- lobby -----
+  fetch('/version', { cache: 'no-store' }).then(r => r.json()).then(v => { $('#ver').textContent = 'Game version ' + v.version; }).catch(() => {});
+  $('#linkInput').value = location.href.split('#')[0];
+  $('#copyBtn').onclick = () => {
+    const i = $('#linkInput'); i.select();
+    try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); }
+    $('#copyBtn').textContent = 'Copied! ✔';
+    setTimeout(() => $('#copyBtn').textContent = 'Copy', 1500);
+  };
+  function chipHTML(p, extra) {
+    const el = document.createElement('div');
+    el.className = 'chip' + (p.connected === false ? ' off' : '') + (extra ? ' ' + extra : '');
+    const em = document.createElement('span'); em.className = 'em'; em.textContent = p.avatar;
+    const nm = document.createElement('span'); nm.textContent = p.name;
+    el.append(em, nm);
+    return el;
+  }
+  function renderLobby() {
+    if (!lobby) return;
+    const box = $('#roster'); box.innerHTML = '';
+    lobby.players.forEach(p => {
+      const c = chipHTML(p);
+      if (p.id === lobby.hostId) c.append(' 👑');
+      box.appendChild(c);
+    });
+    const isHost = lobby.hostId === lobby.you;
+    $('#hostControls').classList.toggle('hidden', !isHost);
+    $('#waitNote').classList.toggle('hidden', isHost);
+    const n = lobby.players.filter(p => p.connected).length;
+    $('#soloNote').textContent = n === 1 ? 'Solo test mode: you play the Runner and also see every specialist screen.' : n + ' players ready. Roles are handed out automatically.';
+  }
+  $('#startBtn').onclick = () => send({ t: 'start' });
+
+  // ----- game setup -----
+  function clearInputs() { keys.clear(); lastDx = 0; lastDy = 0; }
+  function setupGame(m) {
+    me = m.role; runnerInfo = m.runner; ended = false; S = null; V = null; croAt = null;
+    $('#endOverlay').classList.add('hidden');
+    clearInputs();
+    const isRunner = !!me.isRunner, adv = me.advisors || [];
+    const ra = (m.runner && m.runner.avatar) || '🐭';
+    let badge;
+    if (me.spectator) badge = '👀 Spectator (you join next round)';
+    else if (isRunner && adv.length) badge = ra + ' Runner + all specialist screens (solo test)';
+    else if (isRunner) badge = ra + ' You are the Runner!';
+    else badge = adv.map(a => TYPE_LABEL[a.type]).join(' + ');
+    $('#roleBadge').textContent = badge;
+    $('#hint').textContent = isRunner
+      ? 'Move: WASD or arrow keys. Open a cupboard: Space or E, but only when your team is sure: a wrong one is noisy and puts the cat on alert! Hide in 📦 boxes when it looks your way.'
+      : me.spectator ? 'You are watching this round. Click Join next round when the host starts again.'
+      : 'This is what the Runner sees. Only the Runner can move, so guide them over Meet! 🎧';
+
+    // specialist panels
+    const pbox = $('#panels'); pbox.innerHTML = ''; panels = [];
+    adv.forEach(a => {
+      const card = document.createElement('div');
+      if (a.type === 'clue') {
+        card.className = 'card clue';
+        const h = document.createElement('h3');
+        h.textContent = '📜 Clue Keeper' + (a.parts > 1 ? ` (clue set ${a.part + 1} of ${a.parts})` : '');
+        const big = document.createElement('span'); big.className = 'bigcro'; big.textContent = '🥐';
+        h.appendChild(big);
+        const p = document.createElement('p'); p.className = 'sub';
+        p.textContent = 'The golden croissant is hidden in ONE of the six cupboards. These clues are all true:';
+        const ul = document.createElement('ul');
+        a.statements.forEach(s => { const li = document.createElement('li'); li.textContent = s; ul.appendChild(li); });
+        const n = document.createElement('p'); n.className = 'note';
+        n.textContent = "You don't know where anything is, so ask the Mapper which cupboard fits. Don't guess: a wrong cupboard is noisy!" + (a.parts > 1 ? ' Other Clue Keepers hold the rest of the clues.' : '');
+        card.append(h, p, ul, n);
+      } else {
+        card.className = 'card';
+        const h = document.createElement('h3');
+        const cv = document.createElement('canvas');
+        const note = document.createElement('p'); note.className = 'note';
+        if (a.type === 'map') {
+          h.textContent = '🗺️ Mapper' + (a.parts > 1 ? ` (map set ${a.part + 1} of ${a.parts})` : '');
+          note.textContent = "You see the whole kitchen and where the Runner is. You don't know which cupboard is the right one." + (a.parts > 1 ? ' ❓ marks things another Mapper can name.' : '');
+        } else {
+          h.textContent = '🔭 Lookout';
+          note.textContent = (a.showRoute ? 'Pink loop = the guard cat\'s patrol route, numbered, with how long it waits at each stop. ' : '')
+            + (a.showLive ? 'The guard and its red view cone are shown live. ' : '')
+            + "You don't know where the Runner is. Warn them!";
+        }
+        card.append(h, cv, note);
+        panels.push({ type: a.type, data: a, ctx: setupCanvas(cv) });
+      }
+      pbox.appendChild(card);
+    });
+    const solo = adv.length === 0;
+    $('#layout').classList.toggle('solo', solo);
+    // team chips
+    const tb = $('#team'); tb.innerHTML = '';
+    (m.team || []).forEach(t => {
+      const roles = t.isRunner ? 'Runner' :t.types.map(x => TYPE_LABEL[x]).join(' + ');
+      const c = chipHTML({ avatar: t.avatar, name: t.name + ' · ' + (roles || 'Spectator') }, t.isRunner ? 'runner' : '');
+      tb.appendChild(c);
+    });
+    $('#dpad').classList.toggle('on', isRunner);
+    $('#actBtn').classList.toggle('on', isRunner);
+    updateHud({ tl: m.timeLimit, al: 0, cro: 0 });
+    show('game');
+  }
+
+  function fmt(t) { t = Math.max(0, Math.ceil(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); }
+  function updateHud(s) {
+    $('#timer').textContent = fmt(s.tl);
+    const a = Math.max(0, Math.min(100, s.al));
+    const f = $('#alarmFill');
+    f.style.width = a + '%';
+    f.style.background = 'hsl(' + Math.round(130 - a * 1.3) + ',75%,58%)';
+    const l = $('#loot');
+    l.classList.toggle('got', !!s.cro);
+    l.textContent = s.cro ? '🥐✨ GOT IT! Run to the EXIT 🚪' : '🥐 Find the golden croissant';
+  }
+
+  let croAt = null;
+  function onState(m) {
+    if (ended) return;
+    if (m.cro && croAt === null) { croAt = performance.now(); }
+    S = m;
+    if (!V) V = { rx: m.rx, ry: m.ry, gx: m.gx, gy: m.gy, ga: m.ga, avatar: (runnerInfo && runnerInfo.avatar) || '🐭' };
+    updateHud(m);
+    $('#sharedCard').classList.toggle('seen', !!m.seen);
+  }
+
+  // ----- toast -----
+  let toastTimer = null;
+  function toast(text) {
+    const t = $('#toast'); t.textContent = text; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+  }
+
+  // ----- end of round -----
+  function showEnd(m) {
+    ended = true; clearInputs(); send({ t: 'input', dx: 0, dy: 0 });
+    const who = m.runnerName;
+    let title, text;
+    if (m.win) { title = '🥐 Heist success!'; text = who + ' escaped with the golden croissant with ' + fmt(m.tl) + ' left. Great teamwork!'; }
+    else if (m.reason === 'alarm') { title = '🚨 Busted!'; text = 'The guard cat caught ' + who + '. The alarm is blaring!'; }
+    else if (m.reason === 'time') { title = '⏰ Time\'s up!'; text = 'The cafe opened for the day before the croissant got out.'; }
+    else { title = '🔌 Runner disconnected'; text = who + ' lost their connection, so this round was called off.'; }
+    $('#endTitle').textContent = title; $('#endText').textContent = text;
+    renderEndButtons();
+    $('#endOverlay').classList.remove('hidden');
+  }
+  function renderEndButtons() {
+    if (!ended || !lobby) return;
+    const isHost = lobby.hostId === lobby.you;
+    const b = $('#endBtns'); b.innerHTML = '';
+    if (isHost) {
+      const a = document.createElement('button'); a.className = 'btn primary'; a.textContent = 'Next round (roles rotate) 🔄';
+      a.onclick = () => send({ t: 'again' });
+      const l = document.createElement('button'); l.className = 'btn ghost'; l.textContent = 'Back to waiting room';
+      l.onclick = () => send({ t: 'lobby' });
+      b.append(a, l);
+    }
+    $('#endWait').classList.toggle('hidden', isHost);
+  }
+
+  // ----- input (Runner only) -----
+  const keys = new Set();
+  let lastDx = 0, lastDy = 0;
+  const MOVE = { ArrowUp: 'w', ArrowDown: 's', ArrowLeft: 'a', ArrowRight: 'd', w: 'w', a: 'a', s: 's', d: 'd' };
+  function dir() {
+    return { dx: (keys.has('d') ? 1 : 0) - (keys.has('a') ? 1 : 0), dy: (keys.has('s') ? 1 : 0) - (keys.has('w') ? 1 : 0) };
+  }
+  function pushInput(force) {
+    const d = dir();
+    if (force || d.dx !== lastDx || d.dy !== lastDy) { lastDx = d.dx; lastDy = d.dy; send({ t: 'input', dx: d.dx, dy: d.dy }); }
+  }
+  function canPlay() { return screen === 'game' && me && me.isRunner && !ended; }
+  window.addEventListener('keydown', e => {
+    if (!canPlay()) return;
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (k === ' ' || k === 'e') { e.preventDefault(); if (!e.repeat) send({ t: 'interact' }); return; }
+    if (MOVE[k]) { e.preventDefault(); keys.add(MOVE[k]); pushInput(); }
+  });
+  window.addEventListener('keyup', e => {
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (MOVE[k]) { keys.delete(MOVE[k]); if (canPlay()) pushInput(); }
+  });
+  window.addEventListener('blur', () => { keys.clear(); if (canPlay()) pushInput(); });
+  setInterval(() => { if (canPlay()) pushInput(true); }, 300);
+
+  // touch controls
+  document.querySelectorAll('#dpad button').forEach(b => {
+    const k = b.dataset.k;
+    const on = e => { e.preventDefault(); keys.add(k); pushInput(); };
+    const off = e => { e.preventDefault(); keys.delete(k); pushInput(); };
+    b.addEventListener('pointerdown', on);
+    b.addEventListener('pointerup', off);
+    b.addEventListener('pointercancel', off);
+    b.addEventListener('pointerleave', off);
+  });
+  $('#actBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (canPlay()) send({ t: 'interact' }); });
+
+  // ----- render loop -----
+  let lastT = performance.now();
+  function lerpAng(a, b, k) {
+    let d = b - a;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    return a + d * k;
+  }
+  function frame(t) {
+    const dt = Math.min(0.1, (t - lastT) / 1000); lastT = t;
+    if (screen === 'game') {
+      if (S && V) {
+        const k = 1 - Math.exp(-dt * 16);
+        V.rx += (S.rx - V.rx) * k; V.ry += (S.ry - V.ry) * k;
+        V.gx += (S.gx - V.gx) * k; V.gy += (S.gy - V.gy) * k;
+        V.ga = lerpAng(V.ga, S.ga, k);
+        V.t = t / 1000;
+        V.pop = croAt === null ? null : (t - croAt) / 1000;
+      }
+      D.drawShared(sharedCtx, S, V);
+      panels.forEach(p => {
+        if (p.type === 'map') D.drawMap(p.ctx, S, V, p.data);
+        else D.drawLookout(p.ctx, S, V, p.data);
+      });
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // auto-rejoin when the tab was already part of a game (e.g. after a page refresh)
+  if (sessionStorage.getItem('cch_joined') === '1' && myName) { doJoin(); }
+})();
+</script>
+</body>
+</html>
