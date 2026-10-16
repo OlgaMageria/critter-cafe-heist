@@ -3,7 +3,8 @@
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('./room.js'));
   else root.RENDER = factory(root.ROOM);
-})(typeof self !== 'undefined' ? self : this, function (R) {
+})(typeof self !== 'undefined' ? self : this, function (R0) {
+  let R = R0; // the current room; replaced with setRoom() at the start of every round
   const T = 40;
   const W = R.W * T, H = R.H * T;
   const INK = '#5a3e36';
@@ -44,17 +45,19 @@
   }
 
   function drawBase(ctx, gray) {
-    ctx.fillStyle = gray ? '#a7b0ba' : '#c79a7a';
+    const th = R.theme || {};
+    const ex = R.exit;
+    ctx.fillStyle = gray ? '#a7b0ba' : (th.wall || '#c79a7a');
     ctx.fillRect(0, 0, W, H);
     // wall trim
-    ctx.strokeStyle = gray ? '#8d96a0' : '#a87a5c';
+    ctx.strokeStyle = gray ? '#8d96a0' : (th.trim || '#a87a5c');
     ctx.lineWidth = 4;
     ctx.strokeRect(2, 2, W - 4, H - 4);
     // floor
     for (let j = 1; j < R.H - 1; j++) {
       for (let i = 1; i < R.W - 1; i++) {
         const even = (i + j) % 2 === 0;
-        ctx.fillStyle = gray ? (even ? '#eef1f4' : '#e2e7ec') : (even ? '#fff3e0' : '#ffe8cc');
+        ctx.fillStyle = gray ? (even ? '#eef1f4' : '#e2e7ec') : (even ? (th.floorA || '#fff3e0') : (th.floorB || '#ffe8cc'));
         ctx.fillRect(i * T, j * T, T, T);
       }
     }
@@ -62,8 +65,10 @@
     ctx.lineWidth = 3;
     ctx.strokeRect(T, T, W - 2 * T, H - 2 * T);
     if (!gray) {
-      // cute windows on the top wall
-      [[3, 2], [9, 2]].forEach(([wx, ww]) => {
+      // cute windows on the top wall (skipped where the exit door is)
+      const doorX0 = ex && ex.side === 'top' ? ex.x : -9, doorX1 = ex && ex.side === 'top' ? ex.x + ex.w : -9;
+      (th.windows || []).forEach(([wx, ww]) => {
+        if (wx < doorX1 + 0.5 && wx + ww > doorX0 - 0.5) return;
         ctx.fillStyle = '#cdeeff';
         rr(ctx, wx * T + 4, 7, ww * T - 8, 24, 6); ctx.fill();
         ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke();
@@ -71,7 +76,7 @@
         ctx.moveTo(wx * T + ww * T / 2, 7); ctx.lineTo(wx * T + ww * T / 2, 31);
         ctx.stroke();
       });
-      emoji(ctx, '☕', 12.5 * T, 20, 20);
+      if (th.deco && !(th.deco.x > doorX0 - 0.7 && th.deco.x < doorX1 + 0.7)) emoji(ctx, th.deco.emoji, th.deco.x * T, 20, 20);
     }
   }
 
@@ -89,19 +94,63 @@
     });
   }
 
-  function drawExit(ctx, open, withLabel, tm) {
+  // state: { ul: door code accepted, cro: croissant found }
+  // The door sits in the wall on R.exit.side (left, right, top or bottom); the mat is on the floor in front of it.
+  function drawExit(ctx, st, withLabel, tm) {
+    st = st || {};
     const e = R.exit;
-    // floor mat (pulses green once you carry the croissant)
+    const side = e.side || 'left';
+    const vertical = side === 'left' || side === 'right';
+    const open = !!(st.ul && st.cro);
+    // floor mat (pulses green once the door is open and you carry the croissant)
     const pulse = open ? 0.4 + 0.2 * Math.sin((tm || 0) * 4) : 0;
     ctx.fillStyle = open ? 'rgba(90,210,140,' + pulse.toFixed(2) + ')' : 'rgba(200,180,170,0.35)';
     rr(ctx, e.x * T + 4, e.y * T + 4, e.w * T - 8, e.h * T - 8, 8); ctx.fill();
     ctx.setLineDash([5, 4]); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke(); ctx.setLineDash([]);
     // door in the wall
-    ctx.fillStyle = open ? '#8fd3a4' : '#d3c3b4';
-    rr(ctx, 4, e.y * T + 3, T - 8, e.h * T - 6, 8); ctx.fill();
+    let dx, dy, dw, dh;
+    if (vertical) { dw = T - 8; dh = e.h * T - 6; dx = side === 'left' ? 4 : W - T + 4; dy = e.y * T + 3; }
+    else { dw = e.w * T - 6; dh = T - 8; dx = e.x * T + 3; dy = side === 'top' ? 4 : H - T + 4; }
+    ctx.fillStyle = open ? '#8fd3a4' : (st.ul ? '#e8dca8' : '#d3c3b4');
+    rr(ctx, dx, dy, dw, dh, 8); ctx.fill();
     ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
-    emoji(ctx, open ? '🚪' : '🔒', T / 2, (e.y + e.h / 2) * T, 22);
-    if (withLabel) label(ctx, 'EXIT', T / 2, e.y * T - 8, 12);
+    // little keypad plate: red lights while locked, green once the code is in
+    const pw = vertical ? dw - 10 : 26, ph = vertical ? 24 : dh - 10;
+    const kx = dx + 5, ky = dy + 5;
+    ctx.fillStyle = '#3d3a4f';
+    rr(ctx, kx, ky, pw, ph, 4); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke();
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
+      ctx.fillStyle = st.ul ? '#7ddf9a' : '#ff8f8f';
+      const lx = vertical ? kx + 6 + c * 8 : kx + 6 + c * 7, ly = vertical ? ky + 7 + r * 9 : ky + 6 + r * 9;
+      ctx.beginPath(); ctx.arc(lx, ly, 2.2, 0, Math.PI * 2); ctx.fill();
+    }
+    emoji(ctx, open ? '🚪' : (st.ul ? '🔓' : '🔒'),
+      vertical ? dx + dw / 2 : dx + dw - 22, vertical ? dy + dh - 22 : dy + dh / 2, 22);
+    if (withLabel) {
+      const txt = st.ul ? 'EXIT' : 'EXIT 🔢';
+      if (vertical) label(ctx, txt, dx + dw / 2 + (side === 'left' ? 6 : -6), e.y * T - 8, 12);
+      else label(ctx, txt, e.x * T + e.w * T / 2, side === 'top' ? (e.y + 1) * T + 9 : e.y * T - 9, 12);
+    }
+  }
+
+  // Sticky notes on the floor: "?" until a Runner reads them, then the symbol
+  function drawNotes(ctx, S, withLabel) {
+    R.notes.forEach((n, i) => {
+      const sym = S && S.nt && S.nt[i];
+      const x = n.x * T, y = n.y * T;
+      ctx.save();
+      ctx.translate(x, y); ctx.rotate((i - 1) * 0.12);
+      ctx.fillStyle = 'rgba(60,40,30,0.2)';
+      rr(ctx, -10, -10, 24, 26, 3); ctx.fill();
+      ctx.fillStyle = sym ? '#d9f5c4' : '#fff4a8';
+      rr(ctx, -12, -13, 24, 26, 3); ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke();
+      ctx.restore();
+      if (sym) emoji(ctx, sym, x, y, 17);
+      else label(ctx, '?', x, y, 16);
+      if (withLabel) label(ctx, 'Note ' + (i + 1), x, y + 25, 11);
+    });
   }
 
   function drawSolid(ctx, s, o) {
@@ -136,18 +185,33 @@
     } else if (!o.noEmoji && s.emoji) {
       emoji(ctx, s.emoji, x + w / 2, y + (h - 3) / 2, Math.min(34, Math.min(w, h) * 0.65));
     }
-    if (o.label) label(ctx, o.label, x + w / 2, y + h / 2 - 1, s.w >= 2 ? 13 : (s.kind === 'cupboard' ? 10 : 12));
+    if (o.label) {
+      // shrink long names so they fit on small pieces of furniture
+      const base = s.w >= 2 ? 13 : (s.kind === 'cupboard' ? 10 : 12);
+      const fit = Math.max(8, Math.min(base, (s.w * T - 4) / (String(o.label).length * 0.58)));
+      label(ctx, o.label, x + w / 2, y + h / 2 - 1, fit);
+    }
   }
 
-  function drawRunner(ctx, x, y, hid, cro, tm, popAge, avatar) {
-    const px = x * T, py = y * T;
+  const RINGS = ['#ff7aa8', '#4f9dff', '#3fbf80', '#ffb020'];
+
+  // rn: {x, y, avatar, name, idx}   o: {hid, carry, tm, popAge, tag}
+  function drawRunner(ctx, rn, o) {
+    o = o || {};
+    const px = rn.x * T, py = rn.y * T;
     ctx.fillStyle = 'rgba(60,40,30,0.25)';
     ctx.beginPath(); ctx.ellipse(px, py + 11, 11, 5, 0, 0, Math.PI * 2); ctx.fill();
-    emoji(ctx, avatar || '🐭', px, py, 28, hid ? 0.55 : 1);
-    if (hid) emoji(ctx, '🤫', px - 14, py - 20, 15);
-    if (cro) {
+    if (o.tag) {
+      // several runners: a colored ring under the feet and a name tag
+      ctx.strokeStyle = RINGS[(rn.idx || 0) % RINGS.length]; ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.ellipse(px, py + 11, 15, 7, 0, 0, Math.PI * 2); ctx.stroke();
+      label(ctx, rn.name || '', px, py + 27, 10);
+    }
+    emoji(ctx, rn.avatar || '🐭', px, py, 28, o.hid ? 0.55 : 1);
+    if (o.hid) emoji(ctx, '🤫', px - 14, py - 20, 15);
+    if (o.carry) {
       // the golden croissant: big, glowing, bobbing next to the mouse
-      const t = tm || 0;
+      const t = o.tm || 0;
       const cx = px + 14, cy = py - 22 + Math.sin(t * 5) * 2.5;
       const g = ctx.createRadialGradient(cx, cy, 3, cx, cy, 26);
       g.addColorStop(0, 'rgba(255,214,90,0.95)');
@@ -161,6 +225,7 @@
       emoji(ctx, '✨', cx - 15, cy - 13 + Math.sin(t * 7) * 2, 12);
       emoji(ctx, '✨', cx + 15, cy + 9 + Math.cos(t * 6) * 2, 10);
     }
+    const popAge = o.popAge;
     if (popAge != null && popAge >= 0 && popAge < 1.5) {
       // "found it!" burst: expanding golden ring and a croissant floating up
       const k = popAge / 1.5;
@@ -179,44 +244,90 @@
     if (seen) emoji(ctx, '❗', px, py - 25, 18);
   }
 
-  function drawCone(ctx, gx, gy, ang, alert) {
-    const px = gx * T, py = gy * T;
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.arc(px, py, (R.guard.range + (alert ? R.alertRangeBonus : 0)) * T, ang - R.guard.half, ang + R.guard.half);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(255,90,100,0.22)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(235,60,80,0.7)'; ctx.lineWidth = 2; ctx.stroke();
+  // The runners in a view: V.rs = [{x, y, avatar, name, idx, out}] (smoothed positions)
+  function runnersOf(V) {
+    if (V && V.rs && V.rs.length) return V.rs;
+    return [{ x: R.start.x, y: R.start.y, avatar: '🐭', name: '', idx: 0, out: false }];
   }
 
-  // ----- the shared "flashlight" view everyone sees -----
-  function drawShared(ctx, S, V) {
+  function darkLayer(ctx) {
+    const c = ctx.canvas;
+    if (!c || typeof document === 'undefined') return null;
+    if (!c._dark) { const d = document.createElement('canvas'); d.width = c.width; d.height = c.height; c._dark = d; }
+    return c._dark;
+  }
+
+  // darkness everywhere except a soft flashlight circle around each light
+  function drawDarkness(ctx, lights) {
+    const rad = R.light * T;
+    const layer = darkLayer(ctx);
+    if (layer) {
+      const dc = layer.getContext('2d');
+      const k = layer.width / W;
+      dc.setTransform(k, 0, 0, k, 0, 0);
+      dc.globalCompositeOperation = 'source-over';
+      dc.clearRect(0, 0, W, H);
+      dc.fillStyle = 'rgba(22,14,40,0.992)';
+      dc.fillRect(0, 0, W, H);
+      dc.globalCompositeOperation = 'destination-out';
+      lights.forEach(l => {
+        const px = l.x * T, py = l.y * T;
+        const g = dc.createRadialGradient(px, py, rad * 0.55, px, py, rad);
+        g.addColorStop(0, 'rgba(0,0,0,1)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        dc.fillStyle = g;
+        dc.fillRect(px - rad, py - rad, rad * 2, rad * 2);
+      });
+      dc.globalCompositeOperation = 'source-over';
+      ctx.drawImage(layer, 0, 0, W, H);
+    } else {
+      lights.forEach(l => {
+        const px = l.x * T, py = l.y * T;
+        const g = ctx.createRadialGradient(px, py, rad * 0.55, px, py, rad);
+        g.addColorStop(0, 'rgba(22,14,40,0)');
+        g.addColorStop(1, 'rgba(22,14,40,0.992)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+      });
+    }
+    // a warm ring so the light looks like a torch
+    ctx.strokeStyle = 'rgba(255,230,150,0.35)'; ctx.lineWidth = 2;
+    lights.forEach(l => { ctx.beginPath(); ctx.arc(l.x * T, l.y * T, rad * 0.97, 0, Math.PI * 2); ctx.stroke(); });
+  }
+
+  // ----- the shared "flashlight" view -----
+  // opts.light: runner indexes whose flashlight is shown (a Runner sees only their own light);
+  // leave it out to see all lights at once (what the specialists get).
+  function drawShared(ctx, S, V, opts) {
     ctx.clearRect(0, 0, W, H);
     drawBase(ctx, false);
     drawBoxes(ctx, false);
-    drawExit(ctx, !!(S && S.cro), false, V && V.t);
+    drawExit(ctx, S, false, V && V.t);
+    drawNotes(ctx, S, false);
     R.solids.forEach(s => drawSolid(ctx, s, { opened: S && S.op && S.op[s.id] }));
-    const rx = V ? V.rx : R.start.x, ry = V ? V.ry : R.start.y;
-    drawRunner(ctx, rx, ry, S && S.hid, S && S.cro, V && V.t, V && V.pop, V && V.avatar);
-    if (V && Math.hypot(V.gx - rx, V.gy - ry) < R.light + 0.4) drawGuard(ctx, V.gx, V.gy, S && (S.seen || S.ag));
-    // darkness with a soft flashlight circle around the runner
-    const px = rx * T, py = ry * T, rad = R.light * T;
-    const g = ctx.createRadialGradient(px, py, rad * 0.55, px, py, rad);
-    g.addColorStop(0, 'rgba(22,14,40,0)');
-    g.addColorStop(1, 'rgba(22,14,40,0.992)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-    // a warm ring so the light looks like a torch
-    ctx.strokeStyle = 'rgba(255,230,150,0.35)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(px, py, rad * 0.97, 0, Math.PI * 2); ctx.stroke();
+    const rs = runnersOf(V);
+    const tag = rs.length > 1;
+    rs.forEach((rn, i) => {
+      if (rn.out) return;
+      const carry = !!(S && S.cro && S.car === i);
+      drawRunner(ctx, rn, { hid: S && S.rs && S.rs[i] && S.rs[i].h, carry, tm: V && V.t, popAge: carry ? (V && V.pop) : null, tag });
+    });
+    let lights = rs.filter(r => !r.out);
+    if (opts && opts.light && opts.light.length) {
+      const only = lights.filter(r => opts.light.indexOf(r.idx) >= 0);
+      if (only.length) lights = only;
+    }
+    if (V && lights.some(l => Math.hypot(V.gx - l.x, V.gy - l.y) < R.light + 0.4)) drawGuard(ctx, V.gx, V.gy, S && (S.seen || S.ag));
+    drawDarkness(ctx, lights);
   }
 
-  // ----- Mapper: the whole room, labels, live runner dot -----
+  // ----- Mapper: the whole room, labels, live runner dots -----
   function drawMap(ctx, S, V, data) {
     ctx.clearRect(0, 0, W, H);
     drawBase(ctx, false);
     drawBoxes(ctx, true);
-    drawExit(ctx, !!(S && S.cro), true, V && V.t);
+    drawExit(ctx, S, true, V && V.t);
+    drawNotes(ctx, S, true);
     const visible = new Set((data && data.labelIds) || []);
     R.solids.forEach(s => {
       let lab;
@@ -224,13 +335,18 @@
       else lab = visible.has(s.id) ? s.name : '❓';
       drawSolid(ctx, s, { noEmoji: true, plain: true, label: lab, opened: S && S.op && S.op[s.id] });
     });
-    const rx = V ? V.rx : R.start.x, ry = V ? V.ry : R.start.y;
-    ctx.strokeStyle = 'rgba(255,120,160,0.9)'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(rx * T, ry * T, 17, 0, Math.PI * 2); ctx.stroke();
-    drawRunner(ctx, rx, ry, S && S.hid, S && S.cro, V && V.t, V && V.pop, V && V.avatar);
+    const rs = runnersOf(V);
+    const tag = rs.length > 1;
+    rs.forEach((rn, i) => {
+      if (rn.out) return;
+      ctx.strokeStyle = 'rgba(255,120,160,0.9)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(rn.x * T, rn.y * T, 17, 0, Math.PI * 2); ctx.stroke();
+      const carry = !!(S && S.cro && S.car === i);
+      drawRunner(ctx, rn, { hid: S && S.rs && S.rs[i] && S.rs[i].h, carry, tm: V && V.t, popAge: carry ? (V && V.pop) : null, tag });
+    });
   }
 
-  // ----- Lookout: furniture as grey blocks, guard route and/or live guard -----
+  // ----- Lookout: furniture as grey blocks, the guard route and/or a fuzzy cat "radar" -----
   function drawLookout(ctx, S, V, data) {
     ctx.clearRect(0, 0, W, H);
     drawBase(ctx, true);
@@ -259,12 +375,40 @@
       });
     }
     if (data && data.showLive && V) {
-      const al = !!(S && S.ag);
-      drawCone(ctx, V.gx, V.gy, V.ga, al);
-      drawGuard(ctx, V.gx, V.gy, al);
-      if (al) label(ctx, 'ALERT!', V.gx * T, V.gy * T - 38, 14, '#c2410c');
+      // Radar: the cat is only a fuzzy blip that refreshes every few seconds and fades in between.
+      // No view cone and no exact facing: work out where it is heading yourself.
+      const now = V.t || 0;
+      const fade = R.radar.fade;
+      const halo = R.radar.jitter * T * 1.3;
+      if (V.pingPrev) {
+        const q = V.pingPrev;
+        ctx.strokeStyle = 'rgba(120,130,150,0.55)'; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
+        ctx.beginPath(); ctx.arc(q.x * T, q.y * T, 9, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+        label(ctx, 'before', q.x * T, q.y * T + 20, 10, '#7a8794');
+      }
+      if (V.ping) {
+        const p = V.ping;
+        const age = Math.max(0, now - p.t0);
+        const a = Math.max(0, 1 - age / fade);
+        if (a > 0) {
+          ctx.fillStyle = 'rgba(90,200,140,' + (0.22 * a).toFixed(3) + ')';
+          ctx.beginPath(); ctx.arc(p.x * T, p.y * T, halo, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = 'rgba(60,170,110,' + (0.8 * a).toFixed(3) + ')'; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(p.x * T, p.y * T, halo, 0, Math.PI * 2); ctx.stroke();
+          emoji(ctx, '🐾', p.x * T, p.y * T, 22, 0.35 + 0.65 * a);
+        }
+        if (age < 1) {
+          ctx.strokeStyle = 'rgba(60,170,110,' + (1 - age).toFixed(2) + ')'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(p.x * T, p.y * T, halo * (0.4 + age * 1.6), 0, Math.PI * 2); ctx.stroke();
+        }
+      }
+      label(ctx, '📡 radar ping every ' + R.radar.every + 's', W / 2, (R.H - 0.5) * T, 11, '#3d7a5a');
+      if (S && S.ag) label(ctx, 'ALERT!', W / 2, 0.55 * T, 14, '#c2410c');
     }
   }
 
-  return { T, W, H, drawShared, drawMap, drawLookout };
+  function setRoom(r) { R = r; }
+  function getRoom() { return R; }
+
+  return { T, W, H, drawShared, drawMap, drawLookout, setRoom, getRoom };
 });

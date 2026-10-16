@@ -78,6 +78,21 @@ canvas{width:100%;height:auto;display:block;border-radius:14px;border:3px solid 
 .actbtn{position:fixed;bottom:30px;right:20px;width:92px;height:92px;border-radius:50%;font-size:18px;font-weight:700;font-family:inherit;display:none;z-index:15;background:var(--mint)}
 body.touch .dpad.on{display:grid}
 body.touch .actbtn.on{display:block}
+.hud2{display:flex;gap:10px;flex-wrap:wrap;margin:-4px 0 14px}
+.pill{font-weight:600;font-size:17px;padding:6px 12px;border-radius:14px;border:3px solid var(--ink);background:#fff}
+.pill.good{background:#c9f3d6}
+.decoder{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 8px}
+.decoder span{font-size:22px;font-weight:700;background:#fff;border:3px solid var(--ink);border-radius:12px;padding:4px 10px;box-shadow:0 3px 0 rgba(74,51,40,.2)}
+.keypad{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:25;background:var(--card);border:3px solid var(--ink);border-radius:20px;box-shadow:0 6px 0 rgba(74,51,40,.3);padding:12px 16px 14px;text-align:center;width:min(310px,94vw)}
+.keypad .slots{display:flex;gap:10px;justify-content:center;margin:8px 0 12px}
+.keypad .slot{width:56px;height:62px;border:3px solid var(--ink);border-radius:14px;background:#fff;font-size:34px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.keypad .slot.cur{background:var(--butter)}
+.keypad .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.keypad .pad button{font:inherit;font-size:22px;font-weight:700;padding:8px 0;border-radius:12px;border:3px solid var(--ink);background:var(--butter);box-shadow:0 3px 0 var(--ink);cursor:pointer}
+.keypad .pad button.go{background:var(--mint)}
+.keypad.bad{animation:shake .35s}
+@keyframes shake{0%,100%{transform:translateX(-50%)}25%{transform:translateX(calc(-50% - 9px))}75%{transform:translateX(calc(-50% + 9px))}}
+body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
 @media (max-width:900px){
   .layout{grid-template-columns:minmax(0,1fr)}
   .layout #panels{order:-1}
@@ -107,12 +122,13 @@ body.touch .actbtn.on{display:block}
       <p class="note" id="soloNote"></p>
     </div>
     <p id="waitNote" class="note hidden">Waiting for the host to start the heist…</p>
-    <p class="note" id="ver" style="text-align:right;opacity:.6"></p>
     <ul class="rules">
-      <li>One player is the <b>Runner</b> and sneaks around as their chosen animal. Everyone else is a specialist with a <b>private screen</b>.</li>
-      <li>📜 <b>Clue Keeper</b> has a few clues about which of the 6 cupboards hides the golden croissant. Wrong guesses make noise!</li>
-      <li>🗺️ <b>Mapper</b> sees the whole kitchen. 🔭 <b>Lookout</b> sees the guard cat's patrol.</li>
-      <li>Talk on Meet! Guide the Runner to the croissant, then out the exit before the alarm fills up. Roles rotate every round.</li>
+      <li>One player is the <b>Runner</b> and sneaks around as their chosen animal. Everyone else is a specialist with a <b>private screen</b>. With 5 or more players, the 5th (and 9th, 13th) player is a <b>Runner</b> too, and every Runner has to get out.</li>
+      <li>📜 <b>Clue Keeper</b> has clues about which of the 6 colored containers (cupboards, cabinets or crates) hides the golden croissant (wrong guesses make noise!) and a decoder card for the door code.</li>
+      <li>🗺️ <b>Mapper</b> sees the whole kitchen. 🔭 <b>Lookout</b> sees the guard cat only as a fuzzy radar blip plus its patrol route.</li>
+      <li>🚪 The exit has a 🔢 keypad lock. Three sticky notes 📝 hide the code as symbols: the Runner reads them, the Clue Keeper decodes them.</li>
+      <li>🎲 Every round is a <b>random room</b> (the Kitchen, the Back Office or the Storeroom) with a <b>random layout</b>, so nobody can learn the map by heart.</li>
+      <li>Talk on Meet! Get the croissant, crack the code, and get every Runner out before the alarm fills up. Roles rotate every round.</li>
     </ul>
   </section>
 
@@ -124,9 +140,15 @@ body.touch .actbtn.on{display:block}
       <div class="alarm"><span>🔔 Alarm</span><div class="bar"><i id="alarmFill"></i></div></div>
       <div class="loot" id="loot">🥐 Find the croissant</div>
     </div>
+    <div class="hud2">
+      <span class="pill" id="roomPill"></span>
+      <span class="pill" id="notesPill"></span>
+      <span class="pill" id="doorPill"></span>
+      <span class="pill hidden" id="outPill"></span>
+    </div>
     <div class="layout" id="layout">
       <div class="card shared" id="sharedCard">
-        <h3>👀 What the Runner sees</h3>
+        <h3 id="sharedTitle">👀 What the Runner sees</h3>
         <canvas id="shared"></canvas>
         <p class="note" id="hint"></p>
       </div>
@@ -146,6 +168,13 @@ body.touch .actbtn.on{display:block}
     <div class="btns" id="endBtns"></div>
     <p class="note hidden" id="endWait">Waiting for the host to pick what's next…</p>
   </div>
+</div>
+
+<div class="keypad hidden" id="keypad">
+  <b>🔢 Door keypad</b>
+  <div class="slots" id="slots"></div>
+  <div class="pad" id="padBtns"></div>
+  <p class="note" id="padNote">Type 3 digits, then Enter. Esc closes the keypad.</p>
 </div>
 
 <div class="dpad" id="dpad">
@@ -173,7 +202,7 @@ body.touch .actbtn.on{display:block}
 
   // ----- state -----
   let ws = null, joined = false, screen = 'join';
-  let lobby = null, me = null, runnerInfo = null, ended = false;
+  let lobby = null, me = null, runnersInfo = [], myIdx = -1, ended = false, lastPn = -1, noun = 'cupboard';
   let S = null, V = null, panels = [];
   const sharedCanvas = $('#shared');
   const sharedCtx = setupCanvas(sharedCanvas);
@@ -231,12 +260,12 @@ body.touch .actbtn.on{display:block}
       case 'start': setupGame(m); break;
       case 's': onState(m); break;
       case 'toast': toast(m.text); break;
+      case 'keypad': onKeypad(m); break;
       case 'end': showEnd(m); break;
     }
   }
 
   // ----- lobby -----
-  fetch('/version', { cache: 'no-store' }).then(r => r.json()).then(v => { $('#ver').textContent = 'Game version ' + v.version; }).catch(() => {});
   $('#linkInput').value = location.href.split('#')[0];
   $('#copyBtn').onclick = () => {
     const i = $('#linkInput'); i.select();
@@ -271,21 +300,29 @@ body.touch .actbtn.on{display:block}
   // ----- game setup -----
   function clearInputs() { keys.clear(); lastDx = 0; lastDy = 0; }
   function setupGame(m) {
-    me = m.role; runnerInfo = m.runner; ended = false; S = null; V = null; croAt = null;
+    if (m.room) D.setRoom(m.room);
+    noun = (m.room && m.room.noun) || 'cupboard';
+    $('#roomPill').textContent = '📍 ' + ((m.room && m.room.title) || '') + (m.room && m.room.layoutName ? ' · ' + m.room.layoutName : '');
+    me = m.role; runnersInfo = m.runners || []; ended = false; S = null; V = null; croAt = null; lastPn = -1;
+    myIdx = me.isRunner ? (me.runnerIndex == null ? 0 : me.runnerIndex) : -1;
     $('#endOverlay').classList.add('hidden');
+    closePad();
     clearInputs();
     const isRunner = !!me.isRunner, adv = me.advisors || [];
-    const ra = (m.runner && m.runner.avatar) || '🐭';
+    const many = runnersInfo.length > 1;
+    const ra = (runnersInfo[myIdx] && runnersInfo[myIdx].avatar) || '🐭';
     let badge;
     if (me.spectator) badge = '👀 Spectator (you join next round)';
     else if (isRunner && adv.length) badge = ra + ' Runner + all specialist screens (solo test)';
-    else if (isRunner) badge = ra + ' You are the Runner!';
+    else if (isRunner) badge = ra + (many ? ' You are Runner ' + (myIdx + 1) + ' of ' + runnersInfo.length + '!' : ' You are the Runner!');
     else badge = adv.map(a => TYPE_LABEL[a.type]).join(' + ');
     $('#roleBadge').textContent = badge;
+    $('#sharedTitle').textContent = isRunner ? '👀 Your flashlight view' : (many ? '👀 What the Runners see' : '👀 What the Runner sees');
     $('#hint').textContent = isRunner
-      ? 'Move: WASD or arrow keys. Open a cupboard: Space or E, but only when your team is sure: a wrong one is noisy and puts the cat on alert! Hide in 📦 boxes when it looks your way.'
+      ? 'Move: WASD or arrow keys. Space or E: open a ' + noun + ', read a 📝 sticky note, or use the 🔢 keypad by the door. A wrong ' + noun + ' is noisy and puts the cat on alert! Hide in 📦 boxes when it looks your way.'
+        + (many ? ' Your teammates are Runners too: everybody has to get out.' : '')
       : me.spectator ? 'You are watching this round. Click Join next round when the host starts again.'
-      : 'This is what the Runner sees. Only the Runner can move, so guide them over Meet! 🎧';
+      : 'This is what the ' + (many ? 'Runners see' : 'Runner sees') + '. Only the ' + (many ? 'Runners' : 'Runner') + ' can move, so guide them over Meet! 🎧';
 
     // specialist panels
     const pbox = $('#panels'); pbox.innerHTML = ''; panels = [];
@@ -298,12 +335,25 @@ body.touch .actbtn.on{display:block}
         const big = document.createElement('span'); big.className = 'bigcro'; big.textContent = '🥐';
         h.appendChild(big);
         const p = document.createElement('p'); p.className = 'sub';
-        p.textContent = 'The golden croissant is hidden in ONE of the six cupboards. These clues are all true:';
+        p.textContent = 'The golden croissant is hidden in ONE of the six ' + noun + 's. These clues are all true:';
         const ul = document.createElement('ul');
         a.statements.forEach(s => { const li = document.createElement('li'); li.textContent = s; ul.appendChild(li); });
         const n = document.createElement('p'); n.className = 'note';
-        n.textContent = "You don't know where anything is, so ask the Mapper which cupboard fits. Don't guess: a wrong cupboard is noisy!" + (a.parts > 1 ? ' Other Clue Keepers hold the rest of the clues.' : '');
+        n.textContent = "You don't know where anything is, so ask the Mapper which " + noun + " fits. Don't guess: a wrong " + noun + " is noisy!" + (a.parts > 1 ? ' Other Clue Keepers hold the rest of the clues.' : '');
         card.append(h, p, ul, n);
+        if (a.decoder && a.decoder.length) {
+          const dh = document.createElement('p'); dh.className = 'sub'; dh.style.marginTop = '14px';
+          dh.textContent = '🔢 Door code decoder' + (a.decParts > 1 ? ` (card ${a.decPart + 1} of ${a.decParts})` : '')
+            + ': the Runner finds 3 sticky notes with symbols. Turn them into digits. The code is the digits in note order 1, 2, 3.';
+          const dv = document.createElement('div'); dv.className = 'decoder';
+          a.decoder.forEach(d => { const sp = document.createElement('span'); sp.textContent = d.sym + ' = ' + d.digit; dv.appendChild(sp); });
+          card.append(dh, dv);
+          if (a.decParts > 1) {
+            const dn = document.createElement('p'); dn.className = 'note';
+            dn.textContent = 'Other Clue Keepers hold the other symbols.';
+            card.appendChild(dn);
+          }
+        }
       } else {
         card.className = 'card';
         const h = document.createElement('h3');
@@ -311,12 +361,12 @@ body.touch .actbtn.on{display:block}
         const note = document.createElement('p'); note.className = 'note';
         if (a.type === 'map') {
           h.textContent = '🗺️ Mapper' + (a.parts > 1 ? ` (map set ${a.part + 1} of ${a.parts})` : '');
-          note.textContent = "You see the whole kitchen and where the Runner is. You don't know which cupboard is the right one." + (a.parts > 1 ? ' ❓ marks things another Mapper can name.' : '');
+          note.textContent = "You see the whole room, where the Runners are, the three 📝 sticky notes and the 🔢 door keypad. You don't know which " + noun + " is the right one." + (a.parts > 1 ? ' ❓ marks things another Mapper can name.' : '');
         } else {
           h.textContent = '🔭 Lookout';
           note.textContent = (a.showRoute ? 'Pink loop = the guard cat\'s patrol route, numbered, with how long it waits at each stop. ' : '')
-            + (a.showLive ? 'The guard and its red view cone are shown live. ' : '')
-            + "You don't know where the Runner is. Warn them!";
+            + (a.showLive ? 'Radar: the cat is a fuzzy 🐾 blip that refreshes every few seconds and then fades; the dotted circle is where it was last time. No view cone: it looks the way it walks and scans left and right when it stops. ' : '')
+            + "You don't know where the Runners are. Warn them!";
         }
         card.append(h, cv, note);
         panels.push({ type: a.type, data: a, ctx: setupCanvas(cv) });
@@ -328,14 +378,20 @@ body.touch .actbtn.on{display:block}
     // team chips
     const tb = $('#team'); tb.innerHTML = '';
     (m.team || []).forEach(t => {
-      const roles = t.isRunner ? 'Runner' :t.types.map(x => TYPE_LABEL[x]).join(' + ');
+      const roles = t.isRunner ? 'Runner' : t.types.map(x => TYPE_LABEL[x]).join(' + ');
       const c = chipHTML({ avatar: t.avatar, name: t.name + ' · ' + (roles || 'Spectator') }, t.isRunner ? 'runner' : '');
       tb.appendChild(c);
     });
-    $('#dpad').classList.toggle('on', isRunner);
-    $('#actBtn').classList.toggle('on', isRunner);
-    updateHud({ tl: m.timeLimit, al: 0, cro: 0 });
+    refreshRunnerUI();
+    updateHud({ tl: m.timeLimit, al: 0, cro: 0, ul: 0, nt: [null, null, null] });
     show('game');
+  }
+
+  function myOut() { return !!(S && S.rs && myIdx >= 0 && S.rs[myIdx] && S.rs[myIdx].o); }
+  function refreshRunnerUI() {
+    const on = !!(me && me.isRunner) && !ended && !myOut();
+    $('#dpad').classList.toggle('on', on);
+    $('#actBtn').classList.toggle('on', on);
   }
 
   function fmt(t) { t = Math.max(0, Math.ceil(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); }
@@ -347,7 +403,20 @@ body.touch .actbtn.on{display:block}
     f.style.background = 'hsl(' + Math.round(130 - a * 1.3) + ',75%,58%)';
     const l = $('#loot');
     l.classList.toggle('got', !!s.cro);
-    l.textContent = s.cro ? '🥐✨ GOT IT! Run to the EXIT 🚪' : '🥐 Find the golden croissant';
+    l.textContent = s.cro ? (s.ul ? '🥐✨ GOT IT! Run to the EXIT 🚪' : '🥐✨ GOT IT! Now crack the door code 🔢') : '🥐 Find the golden croissant';
+    const nt = s.nt || [null, null, null];
+    $('#notesPill').textContent = '📝 Notes: ' + [0, 1, 2].map(i => nt[i] || '❓').join(' ');
+    const dp = $('#doorPill');
+    dp.textContent = s.ul ? '🔓 Door lock open' : '🔒 Door needs a 3-digit code';
+    dp.classList.toggle('good', !!s.ul);
+    const op = $('#outPill');
+    const n = runnersInfo.length;
+    if (n > 1) {
+      const out = (s.rs || []).filter(r => r.o).length;
+      op.classList.remove('hidden');
+      op.textContent = '🏁 Runners out: ' + out + '/' + n;
+      op.classList.toggle('good', out === n);
+    } else op.classList.add('hidden');
   }
 
   let croAt = null;
@@ -355,9 +424,27 @@ body.touch .actbtn.on{display:block}
     if (ended) return;
     if (m.cro && croAt === null) { croAt = performance.now(); }
     S = m;
-    if (!V) V = { rx: m.rx, ry: m.ry, gx: m.gx, gy: m.gy, ga: m.ga, avatar: (runnerInfo && runnerInfo.avatar) || '🐭' };
+    if (!V) {
+      V = {
+        gx: m.gx, gy: m.gy, ping: null, pingPrev: null,
+        rs: m.rs.map((r, i) => ({
+          x: r.x, y: r.y, idx: i, out: !!r.o,
+          avatar: (runnersInfo[i] && runnersInfo[i].avatar) || '🐭',
+          name: (runnersInfo[i] && runnersInfo[i].name) || ''
+        }))
+      };
+    }
+    if (m.pn !== lastPn) {
+      lastPn = m.pn;
+      V.pingPrev = V.ping;
+      V.ping = { x: m.px, y: m.py, t0: performance.now() / 1000 };
+    }
+    m.rs.forEach((r, i) => { if (V.rs[i]) V.rs[i].out = !!r.o; });
     updateHud(m);
-    $('#sharedCard').classList.toggle('seen', !!m.seen);
+    const mine = myIdx >= 0 && m.rs[myIdx] ? m.rs[myIdx].s : m.seen;
+    $('#sharedCard').classList.toggle('seen', !!mine);
+    if (myOut()) { closePad(); $('#hint').textContent = '🎉 You made it out! Cheer on your teammates and help them over Meet.'; }
+    refreshRunnerUI();
   }
 
   // ----- toast -----
@@ -369,10 +456,10 @@ body.touch .actbtn.on{display:block}
 
   // ----- end of round -----
   function showEnd(m) {
-    ended = true; clearInputs(); send({ t: 'input', dx: 0, dy: 0 });
+    ended = true; closePad(); clearInputs(); send({ t: 'input', dx: 0, dy: 0 }); refreshRunnerUI();
     const who = m.runnerName;
     let title, text;
-    if (m.win) { title = '🥐 Heist success!'; text = who + ' escaped with the golden croissant with ' + fmt(m.tl) + ' left. Great teamwork!'; }
+    if (m.win) { title = '🥐 Heist success!'; text = who + (m.runnerCount > 1 ? ' all escaped' : ' escaped') + ' with the golden croissant with ' + fmt(m.tl) + ' left. Great teamwork!'; }
     else if (m.reason === 'alarm') { title = '🚨 Busted!'; text = 'The guard cat caught ' + who + '. The alarm is blaring!'; }
     else if (m.reason === 'time') { title = '⏰ Time\'s up!'; text = 'The cafe opened for the day before the croissant got out.'; }
     else { title = '🔌 Runner disconnected'; text = who + ' lost their connection, so this round was called off.'; }
@@ -405,8 +492,61 @@ body.touch .actbtn.on{display:block}
     const d = dir();
     if (force || d.dx !== lastDx || d.dy !== lastDy) { lastDx = d.dx; lastDy = d.dy; send({ t: 'input', dx: d.dx, dy: d.dy }); }
   }
-  function canPlay() { return screen === 'game' && me && me.isRunner && !ended; }
+  function canPlay() { return screen === 'game' && me && me.isRunner && !ended && !padOpen && !myOut(); }
+
+  // ----- door keypad (Runner) -----
+  let padOpen = false, padVal = '';
+  const slotsBox = $('#slots'), padBox = $('#padBtns');
+  for (let i = 0; i < 3; i++) { const d = document.createElement('div'); d.className = 'slot'; slotsBox.appendChild(d); }
+  ['1', '2', '3', '4', '5', '6', '7', '8', '9', '⌫', '0', '✔'].forEach(k => {
+    const b = document.createElement('button');
+    b.textContent = k;
+    if (k === '✔') b.className = 'go';
+    b.addEventListener('pointerdown', e => { e.preventDefault(); padKey(k === '⌫' ? 'back' : k === '✔' ? 'ok' : k); });
+    padBox.appendChild(b);
+  });
+  function renderPad() {
+    [...slotsBox.children].forEach((d, i) => {
+      d.textContent = padVal[i] || '';
+      d.classList.toggle('cur', i === padVal.length);
+    });
+  }
+  function openPad() {
+    if (!canPlay()) return;
+    padOpen = true; padVal = '';
+    clearInputs(); send({ t: 'input', dx: 0, dy: 0 });
+    $('#keypad').classList.remove('hidden'); document.body.classList.add('pad-open');
+    renderPad();
+  }
+  function closePad() {
+    padOpen = false; padVal = '';
+    $('#keypad').classList.add('hidden'); document.body.classList.remove('pad-open');
+  }
+  function padKey(k) {
+    if (!padOpen) return;
+    if (k === 'back') padVal = padVal.slice(0, -1);
+    else if (k === 'ok') { if (padVal.length === 3) send({ t: 'code', code: padVal }); }
+    else if (padVal.length < 3) padVal += k;
+    renderPad();
+  }
+  function onKeypad(m) {
+    if (m.result === 'ok') { closePad(); return; }
+    if (m.result === 'bad') {
+      padVal = ''; renderPad();
+      const kp = $('#keypad'); kp.classList.remove('bad'); void kp.offsetWidth; kp.classList.add('bad');
+      return;
+    }
+    if (me && me.isRunner && !ended && !padOpen && !myOut()) openPad(); // server says: you are at the door
+  }
+
   window.addEventListener('keydown', e => {
+    if (padOpen) {
+      if (e.key >= '0' && e.key <= '9' && e.key.length === 1) { e.preventDefault(); padKey(e.key); }
+      else if (e.key === 'Backspace') { e.preventDefault(); padKey('back'); }
+      else if (e.key === 'Enter') { e.preventDefault(); padKey('ok'); }
+      else if (e.key === 'Escape') { e.preventDefault(); closePad(); }
+      return;
+    }
     if (!canPlay()) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (k === ' ' || k === 'e') { e.preventDefault(); if (!e.repeat) send({ t: 'interact' }); return; }
@@ -433,24 +573,22 @@ body.touch .actbtn.on{display:block}
 
   // ----- render loop -----
   let lastT = performance.now();
-  function lerpAng(a, b, k) {
-    let d = b - a;
-    while (d > Math.PI) d -= 2 * Math.PI;
-    while (d < -Math.PI) d += 2 * Math.PI;
-    return a + d * k;
-  }
   function frame(t) {
     const dt = Math.min(0.1, (t - lastT) / 1000); lastT = t;
     if (screen === 'game') {
       if (S && V) {
         const k = 1 - Math.exp(-dt * 16);
-        V.rx += (S.rx - V.rx) * k; V.ry += (S.ry - V.ry) * k;
+        S.rs.forEach((r, i) => {
+          const v = V.rs[i]; if (!v) return;
+          v.x += (r.x - v.x) * k; v.y += (r.y - v.y) * k;
+        });
         V.gx += (S.gx - V.gx) * k; V.gy += (S.gy - V.gy) * k;
-        V.ga = lerpAng(V.ga, S.ga, k);
         V.t = t / 1000;
         V.pop = croAt === null ? null : (t - croAt) / 1000;
       }
-      D.drawShared(sharedCtx, S, V);
+      // a Runner only sees their own flashlight; specialists (and Runners who are out) see all of them
+      const own = (me && me.isRunner && !(me.advisors || []).length && !myOut() && myIdx >= 0) ? [myIdx] : null;
+      D.drawShared(sharedCtx, S, V, own ? { light: own } : null);
       panels.forEach(p => {
         if (p.type === 'map') D.drawMap(p.ctx, S, V, p.data);
         else D.drawLookout(p.ctx, S, V, p.data);
