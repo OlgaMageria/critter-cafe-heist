@@ -99,6 +99,10 @@ const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: SH
     const vig = await run.page.$eval('#vignette', e => +e.style.opacity);
     ok(run.last.al < 55 || vig > 0, 'the red vignette shows when the alarm is high (alarm ' + Math.round(run.last.al) + ', vignette ' + vig + ')');
 
+    // the cat has shown what it can do: blind it, so walking around for the win is not left to chance
+    run.server.send(JSON.stringify({ t: 'see', on: false }));
+    await sleep(100);
+
     // win the round
     for (let i = 0; i < 3; i++) { await tp(R.notes[i].x, R.notes[i].y); ok((await run.page.$eval('#actBtn', b => b.textContent)) === 'READ', 'on note ' + (i + 1) + ' the action button says READ'); await run.page.keyboard.press('e'); await sleep(200); }
     await besides(R.solids.find(s => s.id === dbg.truth));

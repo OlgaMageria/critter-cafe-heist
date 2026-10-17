@@ -12,7 +12,7 @@ const { makeDoor } = require('./door.js');
 const RULES = require('./public/rules.js');
 const Score = require('./scoring.js');
 const DEBUG = !!process.env.CCH_DEBUG; // test mode: guard is blind, teleport + code peek allowed
-const GUARD_SEES = !DEBUG || !!process.env.CCH_SEE; // CCH_SEE=1 gives the guard its eyes back in test mode
+let guardSees = !DEBUG || !!process.env.CCH_SEE; // CCH_SEE=1 gives the guard its eyes back in test mode (tests can switch it with {t:'see'})
 
 const PORT = process.env.PORT || 3000;
 const PUB = path.join(__dirname, 'public');
@@ -462,7 +462,7 @@ function update(dt) {
     rn.hid = R.boxes.some(b => inRect(rn.x, rn.y, b));
     const p = players.get(rn.id);
     const d = Math.hypot(rn.x - gd.x, rn.y - gd.y);
-    if (GUARD_SEES && gd.mode !== 'stunned' && p && p.connected && !rn.hid && d <= range) {
+    if (guardSees && gd.mode !== 'stunned' && p && p.connected && !rn.hid && d <= range) {
       const inCone = d < 0.9 || Math.abs(angDiff(Math.atan2(rn.y - gd.y, rn.x - gd.x), gd.ang)) <= R.guard.half;
       if (inCone && losClear(gd.x, gd.y, rn.x, rn.y)) rn.seen = true;
     }
@@ -484,7 +484,7 @@ function update(dt) {
     // pounce: the cat caught up with a Runner who is not hiding
     const caught = g.runners.find(rn => !rn.out && !rn.hid && Math.hypot(rn.x - gd.x, rn.y - gd.y) <= R.guard.pounceRange &&
       players.get(rn.id) && players.get(rn.id).connected);
-    if (caught && GUARD_SEES) {
+    if (caught && guardSees) {
       g.alarm = Math.min(100, g.alarm + R.pouncePenalty);
       gd.mode = 'stunned'; gd.modeT = R.guard.pounceStun; gd.scanT = 0;
       ev('pounce', caught.x, caught.y, { i: g.runners.indexOf(caught) });
@@ -682,6 +682,9 @@ wss.on('connection', ws => {
           const rn = runnerOf(me.id);
           if (rn) tryCode(rn, m.code);
         }
+        break;
+      case 'see': // test mode only: switch the guard's eyes on or off
+        if (DEBUG) guardSees = !!m.on;
         break;
       case 'tp': // test mode only
         if (DEBUG && phase === 'playing' && game) {

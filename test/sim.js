@@ -20,7 +20,7 @@ function client(name) {
   }));
   c.ws.on('message', raw => {
     const m = JSON.parse(raw);
-    if (m.t === 'start') { c.start = m; c.starts++; }
+    if (m.t === 'start') { c.start = m; c.starts++; c.end = null; } // a new round wipes the last round's result
     else if (m.t === 'ev') c.evs.push(m);
     else if (m.t === 'react') c.reacts.push(m);
     else if (m.t === 'roster') c.roster = m;
@@ -32,12 +32,22 @@ function client(name) {
     else if (m.t === 'lobby') c.lobby = m;
   });
   c.send = m => c.ws.send(JSON.stringify(m));
+  // resolves once the server has really taken this player in (joins on separate sockets can overtake each other)
+  c.joined = async () => { await c.ready; await waitFor(() => c.lobby && c.lobby.players.some(p => p.id === c.id)); };
   c.closed = new Promise(res => c.ws.on('close', res));
   c.idx = () => c.start.role.runnerIndex;
   c.me = () => c.last.rs[c.idx()];
   return c;
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// wait until cond() is true (a slow machine, like a CI runner, needs longer than any fixed sleep); false after ms
+async function waitFor(cond, ms = 10000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) { try { if (cond()) return true; } catch (e) {} await sleep(25); }
+  return false;
+}
+// a client has its round: start message plus the first live state
+const inGame = c => !!(c.start && c.last && c.last.rs);
 let fails = 0;
 const ok = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); if (!cond) fails++; };
 
@@ -83,7 +93,7 @@ function farFromKeypad() {
 async function scenario(n) {
   console.log('\n--- scenario: ' + n + ' players ---');
   const cs = [];
-  for (let i = 0; i < n; i++) { const c = client('P' + i); cs.push(c); await c.ready; await sleep(30); }
+  for (let i = 0; i < n; i++) { const c = client('P' + i); cs.push(c); await c.joined(); }
   await sleep(150);
   ok(cs[0].lobby && cs[0].lobby.players.length === n, 'lobby shows ' + n + ' players');
   if (n === R.maxPlayers) {
@@ -98,7 +108,7 @@ async function scenario(n) {
     cs[3] = back;
   }
   cs[0].send({ t: 'start' });
-  await sleep(500);
+  await waitFor(() => cs.every(inGame));
   ok(cs.every(c => c.start), 'everyone got a start message');
   R = cs[0].start.room;
   ok(R && R.solids.length > 6 && R.noun, 'the start message carries the room: ' + R.title + ' / ' + R.layoutName);
@@ -181,10 +191,10 @@ async function scenario(n) {
 async function doorFlow() {
   console.log('\n--- door flow: 5 players, 2 runners ---');
   const cs = [];
-  for (let i = 0; i < 5; i++) { const c = client('D' + i); cs.push(c); await c.ready; await sleep(30); }
+  for (let i = 0; i < 5; i++) { const c = client('D' + i); cs.push(c); await c.joined(); }
   await sleep(150);
   cs[0].send({ t: 'start' });
-  await sleep(500);
+  await waitFor(() => cs.every(inGame));
   R = cs[0].start.room;
   const dbg = cs[0].start.debug;
   ok(!!dbg && /^[1-9]{3}$/.test(dbg.code), 'test mode exposes a 3-digit code: ' + (dbg && dbg.code));
@@ -286,11 +296,11 @@ async function bust(c, room, truth) {
 async function lateJoin() {
   console.log('\n--- joining mid-round, scores across rounds, reactions ---');
   const a = client('L0'), b = client('L1');
-  await a.ready; await sleep(30); await b.ready; await sleep(150);
-  a.send({ t: 'start' }); await sleep(400);
+  await a.joined(); await b.joined(); await waitFor(() => a.lobby.players.length === 2);
+  a.send({ t: 'start' }); await waitFor(() => inGame(a) && inGame(b));
   R = a.start.room;
   const late = client('Late');
-  await late.ready; await sleep(400);
+  await late.ready; await waitFor(() => inGame(late));
   ok(late.start && late.start.role.spectator, 'a player who joins mid-round gets the round as a spectator');
   ok(late.last && late.last.rs, 'the spectator gets the live state');
   const entry = a.lobby.players.find(p => p.id === late.id);
@@ -301,7 +311,7 @@ async function lateJoin() {
   ok(a.end && a.end.reason === 'alarm' && !a.end.win, 'too many wrong containers set off the alarm');
   ok(a.end.score.pts === 0 && a.end.board.rounds === 1 && a.end.board.wins === 0, 'a busted round scores 0 and still counts as a round');
   ok(late.end && late.end.replay, 'the late joiner sees the end of the round and the replay too');
-  a.send({ t: 'again' }); await sleep(400);
+  a.send({ t: 'again' }); await waitFor(() => late.starts === 2 && inGame(a));
   ok(late.start.role && !late.start.role.spectator && late.starts === 2, 'the late joiner gets a real role in the next round');
   ok(a.start.team.length === 3, 'the next round has all 3 players');
   ok(!a.lobby.players.find(p => p.id === late.id).waiting, 'they are no longer marked as waiting');
@@ -325,15 +335,15 @@ async function lateJoin() {
 async function swapFlow() {
   console.log('\n--- runner disconnects, host hands over the critter ---');
   const cs = [];
-  for (let i = 0; i < 4; i++) { const c = client('S' + i); cs.push(c); await c.ready; await sleep(30); }
+  for (let i = 0; i < 4; i++) { const c = client('S' + i); cs.push(c); await c.joined(); }
   await sleep(150);
   const host = cs[0];
-  host.send({ t: 'start' }); await sleep(400);
+  host.send({ t: 'start' }); await waitFor(() => cs.every(inGame));
   R = host.start.room;
   let runner = cs.find(c => c.start.role.isRunner);
   if (runner === host) { // the host has to stay connected for this test: next round
     await bust(runner, R, host.start.debug.truth);
-    host.send({ t: 'again' }); await sleep(400);
+    host.send({ t: 'again' }); await waitFor(() => cs.every(c => c.starts === 2 && inGame(c)));
     R = host.start.room;
     runner = cs.find(c => c.start.role.isRunner);
   }
@@ -342,7 +352,7 @@ async function swapFlow() {
   const spot = standAt(cupCenter(R.solids.find(s => s.kind === 'cupboard' && s.id !== host.start.debug.truth)));
   runner.send({ t: 'tp', x: spot.x, y: spot.y }); await sleep(200);
   const pos = { ...runner.me() };
-  runner.ws.close(); await sleep(400);
+  runner.ws.close(); await waitFor(() => host.last.rs[0].c === 0);
   ok(host.last.rs[0].c === 0, 'the state shows the Runner is disconnected');
   ok(host.last.dl > 0 && host.last.dl <= R.dropSeconds, 'and how long until the round is called off (' + host.last.dl + 's)');
   ok(host.toasts.some(t => t.includes('lost their connection')), 'everybody is told the Runner dropped');
@@ -350,10 +360,13 @@ async function swapFlow() {
   ok(!taker.start.role.isRunner, 'only the host can hand over the critter');
   host.send({ t: 'swap', runner: 0, to: runner.id }); await sleep(200);
   ok(host.last.rs[0].c === 0, 'the critter cannot be handed back to the missing player');
-  host.send({ t: 'swap', runner: 0, to: taker.id }); await sleep(300);
-  ok(taker.start.role.isRunner && taker.start.role.runnerIndex === 0 && taker.starts === 2, 'the chosen player becomes the Runner');
+  const startsBefore = taker.starts;
+  host.send({ t: 'swap', runner: 0, to: taker.id }); await waitFor(() => taker.starts === startsBefore + 1);
+  ok(taker.start.role.isRunner && taker.start.role.runnerIndex === 0 && taker.starts === startsBefore + 1, 'the chosen player becomes the Runner');
   ok(Math.abs(taker.me().x - pos.x) < 0.01 && Math.abs(taker.me().y - pos.y) < 0.01, 'they take over at the same spot');
+  await waitFor(() => host.roster);
   ok(host.roster && host.roster.runners[0].id === taker.id, 'everybody else gets the new runner names');
+  await waitFor(() => host.last.rs[0].c === 1 && host.last.dl === null);
   ok(host.last.rs[0].c === 1 && host.last.dl === null, 'the round goes on');
   let moved = false;
   for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
@@ -363,7 +376,7 @@ async function swapFlow() {
   }
   ok(moved, 'the new Runner can move');
   const back = client(runner.name); // the missing player comes back
-  await back.ready; await sleep(300);
+  await back.ready; await waitFor(() => inGame(back));
   ok(back.start && !back.start.role.isRunner && back.start.role.advisors.map(a => a.type).join() === takerRole, 'the returning player gets the job of the one who took over (' + takerRole + ')');
   ok(!cs.some(c => c.end), 'nobody lost the round because of the disconnect');
   [...cs, back].forEach(c => { try { c.ws.close(); } catch (e) {} });
@@ -374,8 +387,8 @@ async function swapFlow() {
 async function catFlow() {
   console.log('\n--- the cat: spot, chase, pounce, search, go back ---');
   const c = client('Cat');
-  await c.ready; await sleep(150);
-  c.send({ t: 'start' }); await sleep(400);
+  await c.joined();
+  c.send({ t: 'start' }); await waitFor(() => inGame(c));
   R = c.start.room;
   ok(c.last.gm === 0, 'the cat starts on patrol');
   // stand right where the cat is
