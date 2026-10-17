@@ -78,6 +78,7 @@ canvas{width:100%;height:auto;display:block;border-radius:14px;border:3px solid 
 .actbtn{position:fixed;bottom:30px;right:20px;width:92px;height:92px;border-radius:50%;font-size:18px;font-weight:700;font-family:inherit;display:none;z-index:15;background:var(--mint)}
 body.touch .dpad.on{display:grid}
 body.touch .actbtn.on{display:block}
+.actbtn.dim{opacity:.55}
 .hud2{display:flex;gap:10px;flex-wrap:wrap;margin:-4px 0 14px}
 .pill{font-weight:600;font-size:17px;padding:6px 12px;border-radius:14px;border:3px solid var(--ink);background:#fff}
 .pill.good{background:#c9f3d6}
@@ -93,7 +94,74 @@ body.touch .actbtn.on{display:block}
 .keypad.bad{animation:shake .35s}
 @keyframes shake{0%,100%{transform:translateX(-50%)}25%{transform:translateX(calc(-50% - 9px))}75%{transform:translateX(calc(-50% + 9px))}}
 body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
+/* sound toggle, reactions */
+#soundBtn{position:fixed;top:12px;right:12px;z-index:35;font:inherit;font-weight:600;font-size:15px;padding:6px 12px;border-radius:12px;border:3px solid var(--ink);background:#fff;color:var(--ink);cursor:pointer;box-shadow:0 3px 0 var(--ink)}
+#soundBtn.on{background:var(--mint)}
+.reacts{display:flex;gap:6px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+.reacts button{font-size:22px;width:46px;height:42px;border-radius:12px;border:3px solid var(--ink);background:#fff;cursor:pointer;box-shadow:0 3px 0 var(--ink);padding:0}
+.reacts button:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+#floaters{position:fixed;left:0;right:0;bottom:0;height:0;z-index:22;pointer-events:none}
+.floater{position:absolute;bottom:20px;display:flex;flex-direction:column;align-items:center;animation:floatup 2.6s ease-out forwards}
+.floater b{font-size:40px;line-height:1}
+.floater span{font-size:12px;font-weight:600;background:#fff;border:2px solid var(--ink);border-radius:8px;padding:0 6px;margin-top:2px}
+@keyframes floatup{0%{transform:translateY(0) scale(.6);opacity:0}12%{transform:translateY(-30px) scale(1.15);opacity:1}100%{transform:translateY(-260px) scale(1);opacity:0}}
+
+/* drama: the alarm creeps up, the clock runs out, the cat gives chase */
+#vignette{position:fixed;inset:0;pointer-events:none;z-index:18;opacity:0;transition:opacity .3s;
+  box-shadow:inset 0 0 120px 40px rgba(255,40,40,.55)}
+body.critical #vignette{animation:throb .7s ease-in-out infinite}
+@keyframes throb{0%,100%{box-shadow:inset 0 0 110px 34px rgba(255,40,40,.5)}50%{box-shadow:inset 0 0 160px 60px rgba(255,30,30,.75)}}
+.hud .alarm.hot .bar{animation:barpulse .5s ease-in-out infinite}
+@keyframes barpulse{0%,100%{box-shadow:0 0 0 0 rgba(255,60,60,.0)}50%{box-shadow:0 0 0 5px rgba(255,60,60,.45)}}
+.hud .timer.low{background:#ffd0d0;color:#b4232a}
+.hud .timer.crit{background:var(--tomato);color:#fff;animation:tick 1s steps(2) infinite}
+@keyframes tick{50%{transform:scale(1.08)}}
+.pill.cat{background:#ffd0d0;animation:barpulse .6s ease-in-out infinite}
+.shake{animation:shakebox .4s}
+@keyframes shakebox{0%,100%{transform:none}20%{transform:translate(-7px,2px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,1px)}80%{transform:translate(3px,0)}}
+#flash{position:fixed;inset:0;pointer-events:none;z-index:19;background:#fff;opacity:0}
+#flash.go{animation:flash .45s ease-out}
+@keyframes flash{0%{opacity:.75;background:#ff9b9b}100%{opacity:0}}
+
+/* a Runner lost their connection */
+.dropbox{background:#fff0d6;margin:0 0 14px}
+.dropbox .who{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.dropbox .who .btn{font-size:15px;padding:6px 12px}
+
+/* scoreboard */
+.board{margin:14px 0 4px;padding:12px 14px;border:3px dashed var(--ink);border-radius:16px;background:#fffaf0}
+.board h4{margin:0 0 6px;font-size:18px}
+.tally{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0}
+.tally span{font-weight:600;font-size:15px;padding:3px 10px;border-radius:999px;border:2px solid var(--ink);background:#fff}
+.history{margin:8px 0 0;padding:0;list-style:none;font-size:15px}
+.history li{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px dotted #d9c4b4}
+.history li:last-child{border-bottom:0}
+.chip.wait{border-style:dashed}
+.full{background:#ffe0e0;border:3px solid var(--tomato);border-radius:14px;padding:10px 12px;font-weight:600;margin:0 0 12px}
+
+/* end of round */
+.overlay{overflow:auto;align-items:flex-start}
+.overlay .card.endcard{max-width:980px;width:100%;margin:auto}
+.stars{font-size:34px;letter-spacing:4px;min-height:8px}
+.stars i{font-style:normal;opacity:.25}
+.stars i.on{opacity:1;animation:pop .5s backwards}
+.stars i.on:nth-child(2){animation-delay:.25s}.stars i.on:nth-child(3){animation-delay:.5s}
+@keyframes pop{0%{transform:scale(0)}70%{transform:scale(1.4)}100%{transform:scale(1)}}
+.endgrid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;text-align:left;margin-top:8px}
+.rpctl{display:flex;align-items:center;gap:8px;margin-top:8px}
+.rpctl button{font:inherit;font-weight:700;font-size:15px;min-width:44px;padding:4px 8px;border-radius:10px;border:3px solid var(--ink);background:var(--butter);cursor:pointer;box-shadow:0 3px 0 var(--ink)}
+.rpctl input{flex:1;accent-color:#ff7aa8}
+.rpctl span{font-weight:600;font-size:14px;min-width:84px;text-align:center}
+.endside h4{margin:0 0 4px;font-size:17px}
+.reveal{background:#fff7cf;border:3px solid var(--ink);border-radius:14px;padding:8px 12px;margin-bottom:10px;font-size:16px}
+.reveal ul{margin:4px 0 0;padding-left:18px;font-size:14px}
+.points{margin-bottom:10px}
+.points div{display:flex;justify-content:space-between;font-size:15px;padding:2px 0}
+.points .tot{font-weight:700;font-size:19px;border-top:2px solid var(--ink);margin-top:4px;padding-top:4px}
+.points .neg{color:#b4232a}
+
 @media (max-width:900px){
+  .endgrid{grid-template-columns:minmax(0,1fr)}
   .layout{grid-template-columns:minmax(0,1fr)}
   .layout #panels{order:-1}
 }
@@ -105,6 +173,7 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
 
   <!-- JOIN -->
   <section id="join" class="card center">
+    <div id="fullNote" class="full hidden"></div>
     <h3>Who's sneaking in today?</h3>
     <input id="nameInput" type="text" maxlength="14" placeholder="Your name" autocomplete="off">
     <div class="avatars" id="avatars"></div>
@@ -122,10 +191,17 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
       <p class="note" id="soloNote"></p>
     </div>
     <p id="waitNote" class="note hidden">Waiting for the host to start the heist…</p>
+    <div class="board hidden" id="boardBox">
+      <h4>🏆 Team scoreboard</h4>
+      <div class="tally" id="boardTally"></div>
+      <ul class="history" id="boardHistory"></ul>
+      <button id="resetBtn" class="btn ghost hidden" style="font-size:14px;padding:4px 12px;margin-top:8px">Reset scores</button>
+    </div>
     <ul class="rules">
       <li>One player is the <b>Runner</b> and sneaks around as their chosen animal. Everyone else is a specialist with a <b>private screen</b>. With 5 or more players, the 5th (and 9th, 13th) player is a <b>Runner</b> too, and every Runner has to get out.</li>
       <li>📜 <b>Clue Keeper</b> has clues about which of the 6 colored containers (cupboards, cabinets or crates) hides the golden croissant (wrong guesses make noise!) and a decoder card for the door code.</li>
       <li>🗺️ <b>Mapper</b> sees the whole kitchen. 🔭 <b>Lookout</b> sees the guard cat only as a fuzzy radar blip plus its patrol route.</li>
+      <li>🙀 The guard cat patrols the room. If it spots a Runner it chases them straight over the furniture and pounces (+30 alarm). Hide in a 📦 box! Noise (a wrong container or code) makes it come and look.</li>
       <li>🚪 The exit has a 🔢 keypad lock. Three sticky notes 📝 hide the code as symbols: the Runner reads them, the Clue Keeper decodes them.</li>
       <li>🎲 Every round is a <b>random room</b> (the Kitchen, the Back Office or the Storeroom) with a <b>random layout</b>, so nobody can learn the map by heart.</li>
       <li>Talk on Meet! Get the croissant, crack the code, and get every Runner out before the alarm fills up. Roles rotate every round.</li>
@@ -145,7 +221,10 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
       <span class="pill" id="notesPill"></span>
       <span class="pill" id="doorPill"></span>
       <span class="pill hidden" id="outPill"></span>
+      <span class="pill hidden" id="catPill"></span>
+      <span class="pill" id="scorePill"></span>
     </div>
+    <div class="card dropbox hidden" id="dropBox"></div>
     <div class="layout" id="layout">
       <div class="card shared" id="sharedCard">
         <h3 id="sharedTitle">👀 What the Runner sees</h3>
@@ -155,6 +234,7 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
       <div class="panels" id="panels"></div>
     </div>
     <div class="team" id="team"></div>
+    <div class="reacts" id="reacts" title="Send a quick reaction to everybody"></div>
   </section>
 </div>
 
@@ -162,13 +242,37 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
 <div id="conn" class="hidden">Reconnecting…</div>
 
 <div id="endOverlay" class="overlay hidden">
-  <div class="card">
+  <div class="card endcard">
     <h2 id="endTitle"></h2>
+    <div class="stars" id="endStars"></div>
     <p id="endText" style="font-size:19px;margin:8px 0"></p>
+    <div class="endgrid">
+      <div>
+        <h4 style="margin:0 0 6px">🎬 Replay: what really happened</h4>
+        <canvas id="replayCv"></canvas>
+        <div class="rpctl">
+          <button id="rpPlay" title="Play / pause">⏸</button>
+          <input type="range" id="rpSeek" min="0" max="1000" value="0" aria-label="Replay position">
+          <span id="rpTime"></span>
+          <button id="rpSpeed" title="Replay speed">4×</button>
+        </div>
+      </div>
+      <div class="endside">
+        <div class="reveal" id="reveal"></div>
+        <h4>This round</h4>
+        <div class="points" id="points"></div>
+        <h4>🏆 Team so far</h4>
+        <div class="tally" id="endTally"></div>
+      </div>
+    </div>
     <div class="btns" id="endBtns"></div>
     <p class="note hidden" id="endWait">Waiting for the host to pick what's next…</p>
   </div>
 </div>
+<div id="vignette"></div>
+<div id="flash"></div>
+<div id="floaters"></div>
+<button id="soundBtn" title="Sound effects (quiet, off by default)">🔇 Sound off</button>
 
 <div class="keypad hidden" id="keypad">
   <b>🔢 Door keypad</b>
@@ -185,13 +289,19 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
 <button class="actbtn" id="actBtn">OPEN</button>
 
 <script src="room.js"></script>
+<script src="rules.js"></script>
 <script src="render.js"></script>
+<script src="sound.js"></script>
 <script>
 (function () {
-  const R = window.ROOM, D = window.RENDER;
+  const R = window.ROOM, D = window.RENDER, RULES = window.RULES, SFX = window.SFX;
   const $ = s => document.querySelector(s);
   const AVATARS = ['🐭','🐹','🐰','🦊','🐼','🐨','🐸','🐵','🐧','🦝','🐻','🐯'];
   const TYPE_LABEL = { clue: '📜 Clue Keeper', map: '🗺️ Mapper', lookout: '🔭 Lookout' };
+  const REACTS = ['👏', '😱', '😂', '🙀', '❤️', '🔥'];
+  // what each game event looks like on the map (the sound has the same name)
+  const FX = { note: '📝', found: '🥐', wrong: '💥', badcode: '🚫', unlock: '🔓', out: '🚪', spotted: '‼️', lost: '❓', pounce: '💥' };
+  const now = () => performance.now() / 1000;
   if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.body.classList.add('touch');
 
   // ----- identity (per tab, so you can test with several tabs) -----
@@ -204,6 +314,8 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
   let ws = null, joined = false, screen = 'join';
   let lobby = null, me = null, runnersInfo = [], myIdx = -1, ended = false, lastPn = -1, noun = 'cupboard';
   let S = null, V = null, panels = [];
+  let fxList = [], endMsg = null, rp = null;
+  let lastBeat = 0, lastSec = -1;
   const sharedCanvas = $('#shared');
   const sharedCtx = setupCanvas(sharedCanvas);
 
@@ -229,6 +341,7 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
     avBox.appendChild(b);
   });
   function doJoin() {
+    $('#fullNote').classList.add('hidden');
     myName = ($('#nameInput').value || '').trim() || 'Critter';
     localStorage.setItem('cch_name', myName);
     localStorage.setItem('cch_avatar', myAvatar);
@@ -248,6 +361,17 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
     ws.onmessage = e => handle(JSON.parse(e.data));
     ws.onclose = () => { if (joined) { $('#conn').classList.remove('hidden'); setTimeout(connect, 1500); } };
   }
+  // the game already has the maximum number of players
+  function onFull(m) {
+    joined = false;
+    sessionStorage.removeItem('cch_joined');
+    $('#conn').classList.add('hidden');
+    const f = $('#fullNote');
+    f.textContent = '🚫 Lobby full: the heist crew already has ' + m.max + ' players. Try again when someone leaves.';
+    f.classList.remove('hidden');
+    $('#joinBtn').textContent = 'Try again 🐾';
+    show('join');
+  }
 
   function handle(m) {
     switch (m.t) {
@@ -262,6 +386,10 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
       case 'toast': toast(m.text); break;
       case 'keypad': onKeypad(m); break;
       case 'end': showEnd(m); break;
+      case 'ev': onEv(m); break;
+      case 'roster': onRoster(m); break;
+      case 'react': onReact(m); break;
+      case 'full': onFull(m); break;
     }
   }
 
@@ -285,16 +413,50 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
     if (!lobby) return;
     const box = $('#roster'); box.innerHTML = '';
     lobby.players.forEach(p => {
-      const c = chipHTML(p);
+      const c = chipHTML(p, p.waiting ? 'wait' : '');
       if (p.id === lobby.hostId) c.append(' 👑');
+      if (p.waiting) c.append(' ⏳');
       box.appendChild(c);
     });
+    renderBoard();
+    if (screen === 'game') renderDrop();
     const isHost = lobby.hostId === lobby.you;
     $('#hostControls').classList.toggle('hidden', !isHost);
     $('#waitNote').classList.toggle('hidden', isHost);
     const n = lobby.players.filter(p => p.connected).length;
-    $('#soloNote').textContent = n === 1 ? 'Solo test mode: you play the Runner and also see every specialist screen.' : n + ' players ready. Roles are handed out automatically.';
+    $('#soloNote').textContent = (n === 1 ? 'Solo test mode: you play the Runner and also see every specialist screen.' : n + ' players ready. Roles are handed out automatically.')
+      + (n >= (lobby.max || 15) ? ' The crew is full (' + lobby.max + ' max).' : '');
   }
+
+  // ----- team scoreboard (kept by the server across rounds) -----
+  function fmtShort(sec) { return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
+  function tallyHTML(box, b) {
+    box.innerHTML = '';
+    const items = ['🏆 ' + b.total + ' pts', '✅ ' + b.wins + ' / ' + b.rounds + ' won', '⭐ ' + b.stars];
+    if (b.streak > 1) items.push('🔥 ' + b.streak + ' in a row');
+    if (b.bestStreak > 1 && b.bestStreak > b.streak) items.push('best streak ' + b.bestStreak);
+    if (b.fastest != null) items.push('⚡ fastest ' + fmtShort(b.fastest));
+    items.forEach(t => { const s = document.createElement('span'); s.textContent = t; box.appendChild(s); });
+  }
+  const REASON = { alarm: '🚨 busted', time: '⏰ time', left: '🔌 called off' };
+  function renderBoard() {
+    const b = lobby && lobby.board;
+    $('#scorePill').textContent = '🏆 Team ' + (b ? b.total : 0) + ' pts' + (b && b.streak > 1 ? ' · 🔥' + b.streak : '');
+    const has = !!(b && b.rounds);
+    $('#boardBox').classList.toggle('hidden', !has);
+    if (!has) return;
+    tallyHTML($('#boardTally'), b);
+    const ul = $('#boardHistory'); ul.innerHTML = '';
+    b.history.slice(0, 5).forEach(h => {
+      const li = document.createElement('li');
+      const a = document.createElement('span'); a.textContent = 'Round ' + h.round + ' · ' + h.room + ' / ' + h.layout;
+      const c = document.createElement('span');
+      c.textContent = (h.win ? '✅ ' + '⭐'.repeat(h.stars) : REASON[h.reason] || '❌') + ' · +' + h.pts;
+      li.append(a, c); ul.appendChild(li);
+    });
+    $('#resetBtn').classList.toggle('hidden', lobby.hostId !== lobby.you);
+  }
+  $('#resetBtn').onclick = () => { if (confirm('Reset the team scoreboard?')) send({ t: 'resetScores' }); };
   $('#startBtn').onclick = () => send({ t: 'start' });
 
   // ----- game setup -----
@@ -304,6 +466,8 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
     noun = (m.room && m.room.noun) || 'cupboard';
     $('#roomPill').textContent = '📍 ' + ((m.room && m.room.title) || '') + (m.room && m.room.layoutName ? ' · ' + m.room.layoutName : '');
     me = m.role; runnersInfo = m.runners || []; ended = false; S = null; V = null; croAt = null; lastPn = -1;
+    fxList = []; endMsg = null; rp = null; lastSec = -1; dropKey = '';
+    setDrama(0, 999, 0);
     myIdx = me.isRunner ? (me.runnerIndex == null ? 0 : me.runnerIndex) : -1;
     $('#endOverlay').classList.add('hidden');
     closePad();
@@ -312,7 +476,7 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
     const many = runnersInfo.length > 1;
     const ra = (runnersInfo[myIdx] && runnersInfo[myIdx].avatar) || '🐭';
     let badge;
-    if (me.spectator) badge = '👀 Spectator (you join next round)';
+    if (me.spectator) badge = '⏳ You\'re in! You play from the next round';
     else if (isRunner && adv.length) badge = ra + ' Runner + all specialist screens (solo test)';
     else if (isRunner) badge = ra + (many ? ' You are Runner ' + (myIdx + 1) + ' of ' + runnersInfo.length + '!' : ' You are the Runner!');
     else badge = adv.map(a => TYPE_LABEL[a.type]).join(' + ');
@@ -321,7 +485,7 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
     $('#hint').textContent = isRunner
       ? 'Move: WASD or arrow keys. Space or E: open a ' + noun + ', read a 📝 sticky note, or use the 🔢 keypad by the door. A wrong ' + noun + ' is noisy and puts the cat on alert! Hide in 📦 boxes when it looks your way.'
         + (many ? ' Your teammates are Runners too: everybody has to get out.' : '')
-      : me.spectator ? 'You are watching this round. Click Join next round when the host starts again.'
+      : me.spectator ? 'You joined while a round was running, so you watch this one. You are on the crew list and get a role as soon as the host starts the next round.'
       : 'This is what the ' + (many ? 'Runners see' : 'Runner sees') + '. Only the ' + (many ? 'Runners' : 'Runner') + ' can move, so guide them over Meet! 🎧';
 
     // specialist panels
@@ -375,16 +539,65 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
     });
     const solo = adv.length === 0;
     $('#layout').classList.toggle('solo', solo);
-    // team chips
+    renderTeam(m.team);
+    refreshRunnerUI();
+    updateHud({ tl: m.timeLimit, al: 0, cro: 0, ul: 0, nt: [null, null, null] });
+    renderBoard();
+    renderDrop();
+    show('game');
+    SFX.play('start');
+  }
+  function renderTeam(team) {
     const tb = $('#team'); tb.innerHTML = '';
-    (m.team || []).forEach(t => {
+    (team || []).forEach(t => {
       const roles = t.isRunner ? 'Runner' : t.types.map(x => TYPE_LABEL[x]).join(' + ');
       const c = chipHTML({ avatar: t.avatar, name: t.name + ' · ' + (roles || 'Spectator') }, t.isRunner ? 'runner' : '');
       tb.appendChild(c);
     });
-    refreshRunnerUI();
-    updateHud({ tl: m.timeLimit, al: 0, cro: 0, ul: 0, nt: [null, null, null] });
-    show('game');
+  }
+  // the host handed a Runner's critter to someone else: new names, same game
+  function onRoster(m) {
+    runnersInfo = m.runners || runnersInfo;
+    if (V) V.rs.forEach((v, i) => { if (runnersInfo[i]) { v.avatar = runnersInfo[i].avatar; v.name = runnersInfo[i].name; } });
+    renderTeam(m.team);
+    dropKey = ''; renderDrop();
+  }
+
+  // ----- a Runner lost their connection: the host picks who takes over -----
+  let dropKey = '';
+  function renderDrop() {
+    const box = $('#dropBox');
+    const drops = (S && S.rs && !ended) ? S.rs.map((r, i) => ({ r, i })).filter(d => d.r.c === 0 && !d.r.o) : [];
+    if (!drops.length || !lobby) { box.classList.add('hidden'); dropKey = ''; return; }
+    const isHost = lobby.hostId === lobby.you;
+    const busy = new Set(runnersInfo.map(r => r.id));
+    const cands = lobby.players.filter(p => p.connected && !busy.has(p.id));
+    const key = JSON.stringify([drops.map(d => d.i), cands.map(c => c.id), isHost, S.dl]);
+    if (key === dropKey) return;
+    dropKey = key;
+    box.innerHTML = '';
+    drops.forEach(d => {
+      const info = runnersInfo[d.i] || {};
+      const h = document.createElement('div');
+      h.innerHTML = '<b></b>';
+      h.firstChild.textContent = '🔌 ' + (info.avatar || '') + ' ' + (info.name || 'A Runner') + ' lost their connection.';
+      const p = document.createElement('p'); p.className = 'note'; p.style.margin = '4px 0 0';
+      const secs = S.dl != null ? ' The round is called off in ' + S.dl + 's if nobody takes over.' : '';
+      p.textContent = (isHost ? 'Make someone else the Runner (they swap jobs), or wait for them to come back.' : 'Waiting for them to come back, or for the host to pick a new Runner.') + secs;
+      box.append(h, p);
+      if (isHost) {
+        const who = document.createElement('div'); who.className = 'who';
+        if (!cands.length) { const n = document.createElement('span'); n.className = 'note'; n.textContent = 'Nobody free to take over.'; who.appendChild(n); }
+        cands.forEach(c => {
+          const b = document.createElement('button'); b.className = 'btn';
+          b.textContent = 'Make ' + c.avatar + ' ' + c.name + ' the Runner';
+          b.onclick = () => send({ t: 'swap', runner: d.i, to: c.id });
+          who.appendChild(b);
+        });
+        box.appendChild(who);
+      }
+    });
+    box.classList.remove('hidden');
   }
 
   function myOut() { return !!(S && S.rs && myIdx >= 0 && S.rs[myIdx] && S.rs[myIdx].o); }
@@ -395,6 +608,20 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
   }
 
   function fmt(t) { t = Math.max(0, Math.ceil(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); }
+  // the closer the alarm gets to full (and the clock to zero), the louder the screen gets
+  function setDrama(al, tl, gm) {
+    const v = $('#vignette');
+    v.style.opacity = al < 55 ? 0 : Math.min(1, (al - 55) / 35).toFixed(2);
+    document.body.classList.toggle('critical', al >= 80);
+    $('.hud .alarm').classList.toggle('hot', al >= 70);
+    $('#timer').classList.toggle('low', tl <= 30 && tl > 10);
+    $('#timer').classList.toggle('crit', tl <= 10);
+    const cp = $('#catPill');
+    const mood = { 1: '🙀 The cat is CHASING!', 2: '👂 The cat heard something!', 3: '❓ The cat is searching', 5: '😵 The cat is dazed' }[gm];
+    cp.classList.toggle('hidden', !mood);
+    cp.classList.toggle('cat', gm === 1);
+    if (mood) cp.textContent = mood;
+  }
   function updateHud(s) {
     $('#timer').textContent = fmt(s.tl);
     const a = Math.max(0, Math.min(100, s.al));
@@ -440,12 +667,62 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
       V.ping = { x: m.px, y: m.py, t0: performance.now() / 1000 };
     }
     m.rs.forEach((r, i) => { if (V.rs[i]) V.rs[i].out = !!r.o; });
+    V.fx = fxList;
     updateHud(m);
+    setDrama(m.al, m.tl, m.gm);
+    // heartbeat when the alarm is nearly full, a tick for the last ten seconds
+    const t = now();
+    if (m.al >= 70 && t - lastBeat > (m.al >= 90 ? 0.55 : 0.85)) { lastBeat = t; SFX.play('heart'); }
+    const sec = Math.ceil(m.tl);
+    if (sec !== lastSec) { if (sec <= 10 && sec > 0 && lastSec !== -1) SFX.play('tick'); lastSec = sec; }
+    renderDrop();
     const mine = myIdx >= 0 && m.rs[myIdx] ? m.rs[myIdx].s : m.seen;
     $('#sharedCard').classList.toggle('seen', !!mine);
     if (myOut()) { closePad(); $('#hint').textContent = '🎉 You made it out! Cheer on your teammates and help them over Meet.'; }
     refreshRunnerUI();
   }
+
+  // ----- game events: a sound, a little animation where it happened, a shake for the loud ones -----
+  function bump(sel) { const el = $(sel); el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
+  function onEv(m) {
+    SFX.play(m.k);
+    fxList = fxList.filter(f => now() - f.t0 < 2);
+    fxList.push({ x: m.x, y: m.y, e: FX[m.k] || '✨', t0: now(), big: m.k === 'pounce' || m.k === 'wrong', cat: m.k === 'spotted' || m.k === 'lost' });
+    if (V) V.fx = fxList;
+    if (m.k === 'wrong' || m.k === 'badcode') bump('#sharedCard');
+    if (m.k === 'pounce') {
+      bump('#game');
+      const f = $('#flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+    }
+  }
+
+  // ----- quick emoji reactions -----
+  const rbox = $('#reacts');
+  REACTS.forEach(e => {
+    const b = document.createElement('button'); b.textContent = e;
+    // pointerdown + preventDefault: never steal the keyboard focus from a Runner
+    b.addEventListener('pointerdown', ev => { ev.preventDefault(); send({ t: 'react', e }); });
+    rbox.appendChild(b);
+  });
+  function onReact(m) {
+    const f = document.createElement('div'); f.className = 'floater';
+    f.style.left = (8 + Math.random() * 84) + '%';
+    const b = document.createElement('b'); b.textContent = m.e;
+    const n = document.createElement('span'); n.textContent = m.avatar + ' ' + m.name;
+    f.append(b, n);
+    $('#floaters').appendChild(f);
+    setTimeout(() => f.remove(), 2700);
+    SFX.play('react');
+  }
+
+  // ----- sound toggle (off by default, remembered) -----
+  function renderSoundBtn() {
+    const b = $('#soundBtn'), on = SFX.isOn();
+    b.textContent = on ? '🔊 Sound on' : '🔇 Sound off';
+    b.classList.toggle('on', on);
+  }
+  $('#soundBtn').addEventListener('click', e => { SFX.setOn(!SFX.isOn()); renderSoundBtn(); e.currentTarget.blur(); });
+  renderSoundBtn();
 
   // ----- toast -----
   let toastTimer = null;
@@ -457,6 +734,10 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
   // ----- end of round -----
   function showEnd(m) {
     ended = true; closePad(); clearInputs(); send({ t: 'input', dx: 0, dy: 0 }); refreshRunnerUI();
+    endMsg = m;
+    setDrama(0, 999, 0);
+    $('#dropBox').classList.add('hidden');
+    if ($('#endOverlay').classList.contains('hidden')) SFX.play(m.win ? 'win' : 'lose');
     const who = m.runnerName;
     let title, text;
     if (m.win) { title = '🥐 Heist success!'; text = who + (m.runnerCount > 1 ? ' all escaped' : ' escaped') + ' with the golden croissant with ' + fmt(m.tl) + ' left. Great teamwork!'; }
@@ -464,8 +745,65 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
     else if (m.reason === 'time') { title = '⏰ Time\'s up!'; text = 'The cafe opened for the day before the croissant got out.'; }
     else { title = '🔌 Runner disconnected'; text = who + ' lost their connection, so this round was called off.'; }
     $('#endTitle').textContent = title; $('#endText').textContent = text;
+    renderEndExtras(m);
     renderEndButtons();
     $('#endOverlay').classList.remove('hidden');
+  }
+  const rpCtx = setupCanvas($('#replayCv'));
+  function renderEndExtras(m) {
+    const sc = m.score || { pts: 0, stars: 0, parts: [] };
+    const st = $('#endStars'); st.innerHTML = '';
+    if (m.win) for (let i = 0; i < 3; i++) { const s = document.createElement('i'); s.textContent = '⭐'; if (i < sc.stars) s.className = 'on'; st.appendChild(s); }
+    // the secrets
+    const rv = m.reveal || {};
+    const box = $('#reveal'); box.innerHTML = '';
+    const line = (txt) => { const d = document.createElement('div'); d.textContent = txt; box.appendChild(d); return d; };
+    if (rv.truthName) line('🥐 It was in the ' + rv.truthName.toLowerCase() + ' ' + (rv.noun || 'cupboard') + '.');
+    if (rv.code) line('🔢 Door code ' + rv.code.split('').join(' ') + '  (' + (rv.noteSyms || []).join(' ') + ')');
+    if (rv.clues && rv.clues.length) {
+      const ul = document.createElement('ul');
+      rv.clues.forEach(c => { const li = document.createElement('li'); li.textContent = c; ul.appendChild(li); });
+      line('📜 The clues were:').appendChild(ul);
+    }
+    // points for this round
+    const pb = $('#points'); pb.innerHTML = '';
+    if (!sc.parts.length) { const d = document.createElement('div'); d.textContent = 'No points this time.'; pb.appendChild(d); }
+    sc.parts.forEach(p => {
+      const d = document.createElement('div'); if (p.pts < 0) d.className = 'neg';
+      const a = document.createElement('span'); a.textContent = p.label;
+      const b = document.createElement('span'); b.textContent = (p.pts > 0 ? '+' : '') + p.pts;
+      d.append(a, b); pb.appendChild(d);
+    });
+    const tot = document.createElement('div'); tot.className = 'tot';
+    tot.innerHTML = '<span>Round total</span><span></span>'; tot.lastChild.textContent = '+' + sc.pts;
+    pb.appendChild(tot);
+    if (m.board) tallyHTML($('#endTally'), m.board);
+    // replay starts right away at 4x
+    rp = m.replay && m.replay.frames && m.replay.frames.length ? { data: m.replay, rv, t: 0, playing: true, speed: 4 } : null;
+    $('#replayCv').parentElement.classList.toggle('hidden', !rp);
+    $('#rpSpeed').textContent = '4×'; $('#rpPlay').textContent = '⏸';
+  }
+  $('#rpPlay').onclick = () => {
+    if (!rp) return;
+    if (!rp.playing && rp.t >= rp.data.duration) rp.t = 0;
+    rp.playing = !rp.playing; $('#rpPlay').textContent = rp.playing ? '⏸' : '▶';
+  };
+  $('#rpSpeed').onclick = () => {
+    if (!rp) return;
+    rp.speed = rp.speed === 1 ? 2 : rp.speed === 2 ? 4 : rp.speed === 4 ? 8 : 1;
+    $('#rpSpeed').textContent = rp.speed + '×';
+  };
+  $('#rpSeek').addEventListener('input', e => { if (rp) { rp.t = e.target.value / 1000 * rp.data.duration; } });
+  function drawReplayFrame(dt) {
+    if (!rp) return;
+    const dur = rp.data.duration || 0;
+    if (rp.playing) {
+      rp.t += dt * rp.speed;
+      if (rp.t >= dur) { rp.t = dur; rp.playing = false; $('#rpPlay').textContent = '▶'; }
+    }
+    D.drawReplay(rpCtx, rp.data, rp.rv, rp.t);
+    if (document.activeElement !== $('#rpSeek')) $('#rpSeek').value = dur ? Math.round(rp.t / dur * 1000) : 0;
+    $('#rpTime').textContent = fmt(rp.t) + ' / ' + fmt(dur);
   }
   function renderEndButtons() {
     if (!ended || !lobby) return;
@@ -524,6 +862,7 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
   }
   function padKey(k) {
     if (!padOpen) return;
+    SFX.play('key');
     if (k === 'back') padVal = padVal.slice(0, -1);
     else if (k === 'ok') { if (padVal.length === 3) send({ t: 'code', code: padVal }); }
     else if (padVal.length < 3) padVal += k;
@@ -588,14 +927,28 @@ body.pad-open .dpad,body.pad-open .actbtn{display:none!important}
       }
       // a Runner only sees their own flashlight; specialists (and Runners who are out) see all of them
       const own = (me && me.isRunner && !(me.advisors || []).length && !myOut() && myIdx >= 0) ? [myIdx] : null;
-      D.drawShared(sharedCtx, S, V, own ? { light: own } : null);
+      const opts = own ? { light: own } : {};
+      // "E: open the red cupboard": what Space / E would do right now (decided by the same rules as the server)
+      let btn = 'OPEN';
+      if (canPlay() && S && V && S.rs[myIdx] && V.rs[myIdx]) {
+        const pr = RULES.promptText(D.getRoom(), RULES.interactTarget(D.getRoom(), S.rs[myIdx].x, S.rs[myIdx].y), S);
+        if (pr) {
+          opts.prompt = { x: V.rs[myIdx].x, y: V.rs[myIdx].y, text: pr.text, done: pr.done, key: document.body.classList.contains('touch') ? '👆' : 'E' };
+          btn = pr.btn;
+        }
+      }
+      if (actBtn.textContent !== btn) actBtn.textContent = btn;
+      actBtn.classList.toggle('dim', !opts.prompt);
+      D.drawShared(sharedCtx, S, V, opts);
       panels.forEach(p => {
         if (p.type === 'map') D.drawMap(p.ctx, S, V, p.data);
         else D.drawLookout(p.ctx, S, V, p.data);
       });
     }
+    if (ended && !$('#endOverlay').classList.contains('hidden')) drawReplayFrame(dt);
     requestAnimationFrame(frame);
   }
+  const actBtn = $('#actBtn');
   requestAnimationFrame(frame);
 
   // auto-rejoin when the tab was already part of a game (e.g. after a page refresh)

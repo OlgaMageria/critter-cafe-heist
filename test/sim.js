@@ -1,6 +1,10 @@
 // Headless test: connects fake players over WebSocket and plays rounds.
 // The server is started in test mode (CCH_DEBUG=1): the guard is blind, players may teleport,
 // and the start message carries the secret code so we can check the whole door flow.
+// With CCH_SEE=1 the guard gets its eyes back (used for the chase / pounce tests).
+//   node test/sim.js            everything (every layout of every room)
+//   node test/sim.js --quick    one layout per room
+//   node test/sim.js --unit     only the tests that need no server
 const WebSocket = require('ws');
 let R = require('../public/room.js'); // replaced by the round's room once a game starts
 const Rooms = require('../rooms/index.js');
@@ -8,7 +12,7 @@ const { makeDoor, decode, SYMBOLS } = require('../door.js');
 let URL = '';
 
 function client(name) {
-  const c = { name, id: 'id-' + name, last: null, start: null, end: null, toasts: [], keypad: [] };
+  const c = { name, id: 'id-' + name, last: null, start: null, end: null, toasts: [], keypad: [], evs: [], reacts: [], roster: null, full: null, starts: 0 };
   c.ws = new WebSocket(URL);
   c.ready = new Promise(res => c.ws.on('open', () => {
     c.ws.send(JSON.stringify({ t: 'join', id: c.id, name, avatar: '🐭' }));
@@ -16,7 +20,11 @@ function client(name) {
   }));
   c.ws.on('message', raw => {
     const m = JSON.parse(raw);
-    if (m.t === 'start') c.start = m;
+    if (m.t === 'start') { c.start = m; c.starts++; }
+    else if (m.t === 'ev') c.evs.push(m);
+    else if (m.t === 'react') c.reacts.push(m);
+    else if (m.t === 'roster') c.roster = m;
+    else if (m.t === 'full') c.full = m;
     else if (m.t === 'end') c.end = m;
     else if (m.t === 'toast') c.toasts.push(m.text);
     else if (m.t === 's') c.last = m;
@@ -24,6 +32,7 @@ function client(name) {
     else if (m.t === 'lobby') c.lobby = m;
   });
   c.send = m => c.ws.send(JSON.stringify(m));
+  c.closed = new Promise(res => c.ws.on('close', res));
   c.idx = () => c.start.role.runnerIndex;
   c.me = () => c.last.rs[c.idx()];
   return c;
@@ -77,6 +86,17 @@ async function scenario(n) {
   for (let i = 0; i < n; i++) { const c = client('P' + i); cs.push(c); await c.ready; await sleep(30); }
   await sleep(150);
   ok(cs[0].lobby && cs[0].lobby.players.length === n, 'lobby shows ' + n + ' players');
+  if (n === R.maxPlayers) {
+    const extra = client('Extra');
+    await extra.ready; await sleep(300);
+    ok(extra.full && extra.full.max === R.maxPlayers, 'player ' + (n + 1) + ' is told the lobby is full');
+    await extra.closed;
+    ok(cs[0].lobby.players.length === n, 'the extra player is not added to the lobby');
+    const back = client('P3'); // same id as a player who is already in: always allowed back
+    await back.ready; await sleep(200);
+    ok(!back.full && back.lobby && back.lobby.players.length === n, 'a player who already has a seat can always reconnect');
+    cs[3] = back;
+  }
   cs[0].send({ t: 'start' });
   await sleep(500);
   ok(cs.every(c => c.start), 'everyone got a start message');
@@ -130,6 +150,8 @@ async function scenario(n) {
   ok(runner.toasts.some(t => t.includes('empty') && t.includes(R.noun)), 'wrong ' + R.noun + ' is empty (' + wrongCup.name + ')');
   ok(runner.last.al >= alBefore0 + R.wrongPenalty - 2, 'wrong container adds ' + R.wrongPenalty + ' alarm (alarm=' + runner.last.al + ')');
   ok(runner.last.ag === 1, 'guard goes on alert after a wrong container');
+  ok(cs.every(c => c.evs.some(e => e.k === 'wrong' && e.id === wrongCup.id)), 'everybody gets the "wrong container" event (sound + animation)');
+  ok([2, 3].includes(runner.last.gm), 'the cat goes to look where the noise was (mode ' + runner.last.gm + ')');
   runner.send({ t: 'input', dx: 0, dy: 0 });
   const other = cs.find(c => !c.start.role.isRunner) || cs.find(c => c !== runner && c.idx() > 0);
   if (other) {
@@ -221,8 +243,165 @@ async function doorFlow() {
   await tp(B, mat.x, mat.y); await sleep(300);
   ok(cs.every(c => c.end && c.end.win), 'round is won when every runner is out');
   ok(A.last.pn > startPing, 'radar blip refreshed during the round (pn ' + startPing + ' -> ' + A.last.pn + ')');
+  const kinds = new Set(clueKeeper.evs.map(e => e.k));
+  ok(['note', 'badcode', 'unlock', 'found', 'out'].every(k => kinds.has(k)), 'game events are sent for notes, codes, the croissant and escapes: ' + [...kinds].join(' '));
+
+  // the end of the round: score, secrets revealed, replay
+  const end = clueKeeper.end;
+  ok(end.reveal && end.reveal.truth === dbg.truth && end.reveal.code === dbg.code, 'the end reveals the right ' + R.noun + ' and the door code');
+  ok(end.reveal.clues.length >= 1 && end.reveal.noteSyms.join('') === dbg.noteSyms.join(''), 'the end reveals the clues and the note symbols');
+  const rp = end.replay;
+  ok(rp && rp.frames.length >= 4 && rp.frames.every(f => f.r.length === 2 && f.g.length === 3), 'the replay has ' + (rp && rp.frames.length) + ' frames with both runners and the cat');
+  ok(rp.frames.every((f, i) => i === 0 || f.t >= rp.frames[i - 1].t), 'replay frames are in time order');
+  ok(rp.events.length === clueKeeper.evs.length, 'the replay holds every event of the round');
+  ok(rp.runners.length === 2 && rp.runners[0].name, 'the replay knows the runners');
+  const sc = end.score;
+  ok(sc && sc.pts >= 15 + 20 + 30 + 100 - 5 && sc.stars >= 1, 'a won round scores points (' + sc.pts + ') and stars (' + sc.stars + ')');
+  ok(sc.parts.some(p => p.pts < 0), 'the wrong code costs points');
+  ok(end.board.rounds === 1 && end.board.wins === 1 && end.board.total === sc.pts, 'the team scoreboard counts the round');
+  ok(clueKeeper.lobby.board.total === sc.pts, 'the lobby carries the scoreboard');
   cs.forEach(c => c.ws.close());
   await sleep(200);
+}
+
+// open wrong containers until the alarm ends the round
+async function bust(c, room, truth) {
+  for (const cup of room.solids.filter(s => s.kind === 'cupboard' && s.id !== truth)) {
+    if (c.end) return;
+    const sp = standAt(cupCenter(cup));
+    c.send({ t: 'tp', x: sp.x, y: sp.y }); await sleep(120);
+    c.send({ t: 'interact' }); await sleep(150);
+  }
+  await sleep(200);
+  // the alarm cools down a little between containers: a wrong door code finishes the job
+  if (!c.end) {
+    const sp = standAtKeypad();
+    c.send({ t: 'tp', x: sp.x, y: sp.y }); await sleep(120);
+    c.send({ t: 'code', code: '000' }); await sleep(100);
+    c.send({ t: 'code', code: c.start.debug.code === '111' ? '222' : '111' }); await sleep(300);
+  }
+}
+
+// Joining while a round runs: you watch it, then you play from the next one. Plus scores over rounds and reactions.
+async function lateJoin() {
+  console.log('\n--- joining mid-round, scores across rounds, reactions ---');
+  const a = client('L0'), b = client('L1');
+  await a.ready; await sleep(30); await b.ready; await sleep(150);
+  a.send({ t: 'start' }); await sleep(400);
+  R = a.start.room;
+  const late = client('Late');
+  await late.ready; await sleep(400);
+  ok(late.start && late.start.role.spectator, 'a player who joins mid-round gets the round as a spectator');
+  ok(late.last && late.last.rs, 'the spectator gets the live state');
+  const entry = a.lobby.players.find(p => p.id === late.id);
+  ok(entry && entry.waiting, 'the lobby marks them as joining next round');
+  ok(!a.start.team.some(t => t.id === late.id), 'they are not part of the running round');
+  const runner = [a, b].find(c => c.start.role.isRunner);
+  await bust(runner, R, a.start.debug.truth);
+  ok(a.end && a.end.reason === 'alarm' && !a.end.win, 'too many wrong containers set off the alarm');
+  ok(a.end.score.pts === 0 && a.end.board.rounds === 1 && a.end.board.wins === 0, 'a busted round scores 0 and still counts as a round');
+  ok(late.end && late.end.replay, 'the late joiner sees the end of the round and the replay too');
+  a.send({ t: 'again' }); await sleep(400);
+  ok(late.start.role && !late.start.role.spectator && late.starts === 2, 'the late joiner gets a real role in the next round');
+  ok(a.start.team.length === 3, 'the next round has all 3 players');
+  ok(!a.lobby.players.find(p => p.id === late.id).waiting, 'they are no longer marked as waiting');
+  ok(a.lobby.board.rounds === 1, 'the scoreboard is still there in round 2');
+
+  // reactions
+  late.send({ t: 'react', e: '👏' }); await sleep(150);
+  ok([a, b, late].every(c => c.reacts.length === 1 && c.reacts[0].e === '👏' && c.reacts[0].name === 'Late'), 'a reaction reaches everybody with the sender\'s name');
+  late.send({ t: 'react', e: '🔥' }); await sleep(150);
+  ok(a.reacts.length === 1, 'reactions are rate limited');
+  await sleep(700);
+  late.send({ t: 'react', e: '<b>hi</b>' }); await sleep(150);
+  ok(a.reacts.length === 1, 'only the listed reaction emoji are allowed');
+  b.send({ t: 'resetScores' }); await sleep(150);
+  ok(a.lobby.board.rounds === 1, 'scores cannot be reset while a round runs');
+  [a, b, late].forEach(c => c.ws.close());
+  await sleep(200);
+}
+
+// A Runner loses their connection; the host hands the critter to someone else.
+async function swapFlow() {
+  console.log('\n--- runner disconnects, host hands over the critter ---');
+  const cs = [];
+  for (let i = 0; i < 4; i++) { const c = client('S' + i); cs.push(c); await c.ready; await sleep(30); }
+  await sleep(150);
+  const host = cs[0];
+  host.send({ t: 'start' }); await sleep(400);
+  R = host.start.room;
+  let runner = cs.find(c => c.start.role.isRunner);
+  if (runner === host) { // the host has to stay connected for this test: next round
+    await bust(runner, R, host.start.debug.truth);
+    host.send({ t: 'again' }); await sleep(400);
+    R = host.start.room;
+    runner = cs.find(c => c.start.role.isRunner);
+  }
+  const taker = cs.find(c => c !== host && c !== runner);
+  const takerRole = taker.start.role.advisors.map(a => a.type).join();
+  const spot = standAt(cupCenter(R.solids.find(s => s.kind === 'cupboard' && s.id !== host.start.debug.truth)));
+  runner.send({ t: 'tp', x: spot.x, y: spot.y }); await sleep(200);
+  const pos = { ...runner.me() };
+  runner.ws.close(); await sleep(400);
+  ok(host.last.rs[0].c === 0, 'the state shows the Runner is disconnected');
+  ok(host.last.dl > 0 && host.last.dl <= R.dropSeconds, 'and how long until the round is called off (' + host.last.dl + 's)');
+  ok(host.toasts.some(t => t.includes('lost their connection')), 'everybody is told the Runner dropped');
+  taker.send({ t: 'swap', runner: 0, to: taker.id }); await sleep(200);
+  ok(!taker.start.role.isRunner, 'only the host can hand over the critter');
+  host.send({ t: 'swap', runner: 0, to: runner.id }); await sleep(200);
+  ok(host.last.rs[0].c === 0, 'the critter cannot be handed back to the missing player');
+  host.send({ t: 'swap', runner: 0, to: taker.id }); await sleep(300);
+  ok(taker.start.role.isRunner && taker.start.role.runnerIndex === 0 && taker.starts === 2, 'the chosen player becomes the Runner');
+  ok(Math.abs(taker.me().x - pos.x) < 0.01 && Math.abs(taker.me().y - pos.y) < 0.01, 'they take over at the same spot');
+  ok(host.roster && host.roster.runners[0].id === taker.id, 'everybody else gets the new runner names');
+  ok(host.last.rs[0].c === 1 && host.last.dl === null, 'the round goes on');
+  let moved = false;
+  for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+    const before = { ...taker.me() };
+    taker.send({ t: 'input', dx, dy }); await sleep(250); taker.send({ t: 'input', dx: 0, dy: 0 }); await sleep(100);
+    if (Math.hypot(taker.me().x - before.x, taker.me().y - before.y) > 0.1) { moved = true; break; }
+  }
+  ok(moved, 'the new Runner can move');
+  const back = client(runner.name); // the missing player comes back
+  await back.ready; await sleep(300);
+  ok(back.start && !back.start.role.isRunner && back.start.role.advisors.map(a => a.type).join() === takerRole, 'the returning player gets the job of the one who took over (' + takerRole + ')');
+  ok(!cs.some(c => c.end), 'nobody lost the round because of the disconnect');
+  [...cs, back].forEach(c => { try { c.ws.close(); } catch (e) {} });
+  await sleep(200);
+}
+
+// The guard can see (CCH_SEE=1): it spots a Runner, chases them, pounces, searches and walks back.
+async function catFlow() {
+  console.log('\n--- the cat: spot, chase, pounce, search, go back ---');
+  const c = client('Cat');
+  await c.ready; await sleep(150);
+  c.send({ t: 'start' }); await sleep(400);
+  R = c.start.room;
+  ok(c.last.gm === 0, 'the cat starts on patrol');
+  // stand right where the cat is
+  let pounce = null;
+  for (let k = 0; k < 12 && !pounce; k++) {
+    const g = c.last;
+    for (const [dx, dy] of [[0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]]) if (!isBlocked(g.gx + dx, g.gy + dy)) { c.send({ t: 'tp', x: g.gx + dx, y: g.gy + dy }); break; }
+    await sleep(150);
+    pounce = c.evs.find(e => e.k === 'pounce');
+  }
+  ok(c.evs.some(e => e.k === 'spotted'), 'the cat spots a Runner right in front of it');
+  ok(!!pounce, 'and pounces');
+  ok(c.last.al >= R.pouncePenalty, 'a pounce adds ' + R.pouncePenalty + ' alarm (alarm=' + c.last.al + ')');
+  ok(c.last.gm === 5, 'the cat is dazed after a pounce');
+  // hide in a box, far away
+  const box = R.boxes.slice().sort((p, q) => Math.hypot(q.x - c.last.gx, q.y - c.last.gy) - Math.hypot(p.x - c.last.gx, p.y - c.last.gy))[0];
+  c.send({ t: 'tp', x: box.x + 0.5, y: box.y + 0.5 }); await sleep(200);
+  ok(c.last.rs[0].h === 1, 'the Runner hides in a box');
+  const alarm = c.last.al;
+  await sleep((R.guard.pounceStun + 0.5) * 1000);
+  ok([3, 4, 0, 1].includes(c.last.gm), 'after the daze the cat searches or heads back (mode ' + c.last.gm + ')');
+  await sleep((R.guard.searchTime + 0.5) * 1000);
+  ok([4, 0].includes(c.last.gm), 'then it walks back to its route (mode ' + c.last.gm + ')');
+  ok(c.last.al <= alarm, 'a hidden Runner is not seen: the alarm cools down');
+  ok(!c.end, 'the round goes on');
+  c.ws.close(); await sleep(200);
 }
 
 function unitTests() {
@@ -275,6 +454,62 @@ function unitTests() {
   ok(seen.size === 15, 'all 15 layouts come up at random (' + seen.size + ' seen in 600 rounds)');
   ok(repeats === 0, 'the same layout never comes twice in a row');
 
+  console.log('\n--- what Space / E does (shared by server and browser) ---');
+  const RULES = require('../public/rules.js');
+  const room = Rooms.getRoom('kitchen', 0);
+  const cup = room.solids.find(x => x.kind === 'cupboard');
+  const nearCup = RULES.interactTarget(room, cup.x + 0.5, cup.y + 1.5);
+  ok(nearCup && nearCup.k === 'cup' && nearCup.s.id === cup.id, 'standing next to a container targets it');
+  ok(RULES.promptText(room, nearCup, {}).text === 'Open the ' + cup.name.toLowerCase() + ' ' + room.noun, 'the prompt names the container');
+  ok(RULES.promptText(room, nearCup, { op: { [cup.id]: 'empty' } }).done, 'an opened container shows as checked');
+  const onNote = RULES.interactTarget(room, room.notes[1].x, room.notes[1].y);
+  ok(onNote && onNote.k === 'note' && onNote.i === 1, 'standing on a note targets that note');
+  ok(RULES.promptText(room, onNote, { nt: [null, null, null] }).text === 'Read note 2', 'the prompt says which note');
+  const atPad = RULES.interactTarget(room, room.keypad.x + (room.exit.side === 'left' ? 1 : room.exit.side === 'right' ? -1 : 0), room.keypad.y + (room.exit.side === 'top' ? 1 : room.exit.side === 'bottom' ? -1 : 0));
+  ok(atPad && atPad.k === 'pad', 'standing near the door targets the keypad');
+  ok(RULES.interactTarget(room, 7.5, 4.5) === null || RULES.interactTarget(room, 7.5, 4.5).d >= 0, 'the target is null or the closest thing');
+  let far = 0;
+  for (let x = 1.3; x < 15; x += 0.5) for (let y = 1.3; y < 9; y += 0.5) if (!RULES.interactTarget(room, x, y)) far++;
+  ok(far > 50, 'most of the floor has nothing to interact with (' + far + ' spots)');
+
+  console.log('\n--- scores ---');
+  const Score = require('../scoring.js');
+  const win = Score.scoreRound({ win: true, notes: 3, unlocked: true, cro: true, wrong: 0, badCodes: 0, timeLeft: 120, maxAlarm: 20 });
+  ok(win.pts === 15 + 20 + 30 + 100 + 60 + 40 && win.stars === 3, 'a clean fast win: ' + win.pts + ' points, 3 stars');
+  const sloppy = Score.scoreRound({ win: true, notes: 3, unlocked: true, cro: true, wrong: 2, badCodes: 1, timeLeft: 10, maxAlarm: 95 });
+  ok(sloppy.stars === 1 && sloppy.pts === 15 + 20 + 30 + 100 + 5 + 2 - 20 - 5, 'a sloppy win: ' + sloppy.pts + ' points, 1 star');
+  const lost = Score.scoreRound({ win: false, notes: 2, unlocked: false, cro: true, wrong: 1, badCodes: 0, timeLeft: 0, maxAlarm: 100 });
+  ok(lost.pts === 10 + 30 - 10 && lost.stars === 0, 'a lost round still scores what got done: ' + lost.pts);
+  ok(Score.scoreRound({ win: false, notes: 0, wrong: 4, badCodes: 3, timeLeft: 0, maxAlarm: 100 }).pts === 0, 'a round never scores below 0');
+  const b = Score.makeBoard();
+  Score.addRound(b, { round: 1, room: 'K', layout: 'A', win: true, time: 200, ...win });
+  Score.addRound(b, { round: 2, room: 'K', layout: 'B', win: true, time: 150, ...sloppy });
+  Score.addRound(b, { round: 3, room: 'K', layout: 'C', win: false, reason: 'alarm', time: 90, ...lost });
+  ok(b.total === win.pts + sloppy.pts + lost.pts && b.rounds === 3 && b.wins === 2, 'the board adds up rounds and points');
+  ok(b.streak === 0 && b.bestStreak === 2 && b.fastest === 150 && b.stars === 4, 'streaks, fastest win and stars');
+  ok(b.history.length === 3 && b.history[0].round === 3, 'history is newest first');
+  for (let i = 4; i < 20; i++) Score.addRound(b, { round: i, room: 'K', layout: 'A', win: true, time: 100, ...win });
+  ok(b.history.length === 10, 'history keeps the last 10 rounds');
+
+  console.log('\n--- browser files ---');
+  const fs = require('fs');
+  const html = fs.readFileSync(__dirname + '/../public/index.html', 'utf8');
+  const inline = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+  let parsed = true;
+  try { new Function(inline); } catch (e) { parsed = false; console.log(e); }
+  ok(parsed, 'the page script has no syntax errors');
+  const ids = [...inline.matchAll(/\$\('#([\w-]+)'\)/g)].map(m => m[1]);
+  const missing = [...new Set(ids)].filter(id => !html.includes('id="' + id + '"'));
+  ok(missing.length === 0, 'every #id the page script uses exists in the page' + (missing.length ? ': ' + missing.join(', ') : ''));
+  for (const f of ['room.js', 'rules.js', 'render.js', 'sound.js']) ok(html.includes('<script src="' + f + '">'), 'the page loads ' + f);
+  const D = require('../public/render.js');
+  ok(['drawShared', 'drawMap', 'drawLookout', 'drawReplay'].every(k => typeof D[k] === 'function'), 'the renderer has every view');
+  const SFX = require('../public/sound.js');
+  ok(!SFX.isOn(), 'sound is off by default');
+  let quiet = true;
+  try { SFX.names.forEach(n => SFX.play(n)); } catch (e) { quiet = false; }
+  ok(quiet && ['note', 'found', 'wrong', 'badcode', 'unlock', 'out', 'spotted', 'lost', 'pounce'].every(n => SFX.names.includes(n)), 'every game event has a sound (and muted sounds do nothing)');
+
   console.log('\n--- door code generator ---');
   let badDoor = 0;
   for (let i = 0; i < 1000; i++) {
@@ -291,16 +526,34 @@ function unitTests() {
   let port = 3111;
   const quick = process.argv.includes('--quick');
   unitTests();
+  if (process.argv.includes('--unit')) {
+    console.log(fails ? '\n' + fails + ' FAILED' : '\nALL PASSED');
+    process.exit(fails ? 1 : 0);
+  }
   const run = async (label, env) => {
     port++;
     URL = 'ws://localhost:' + port + '/ws';
     const srv = spawn('node', ['server.js'], { cwd: __dirname + '/..', env: { ...process.env, PORT: port, CCH_DEBUG: '1', ...env } });
-    await sleep(700);
-    if (label === 'flow') await doorFlow(); else await scenario(label);
-    srv.kill();
+    // wait until the server says it is listening (or give up after 10 s)
+    let log = '';
+    await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('server did not start:\n' + log)), 10000);
+      const on = d => { log += d; if (log.includes('is running')) { clearTimeout(t); res(); } };
+      srv.stdout.on('data', on); srv.stderr.on('data', on);
+      srv.on('exit', code => { clearTimeout(t); rej(new Error('server exited (' + code + '):\n' + log)); });
+    });
+    ok(!log.includes('ROOM PROBLEM'), 'the server starts without room problems');
+    try {
+      if (label === 'flow') await doorFlow();
+      else if (typeof label === 'function') await label();
+      else await scenario(label);
+    } finally { srv.removeAllListeners('exit'); srv.kill(); }
   };
   try {
     for (const n of [1, 2, 3, 4, 5, 6, 9, 15]) await run(n, {});
+    await run(lateJoin, {});
+    await run(swapFlow, {});
+    await run(catFlow, { CCH_SEE: '1' });
     // the whole door flow in every single layout of every room
     const only = quick ? Rooms.LIST.filter((_, i) => i % 5 === 0) : Rooms.LIST;
     for (const r of only) {
