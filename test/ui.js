@@ -148,7 +148,11 @@ const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: SH
     const btns = await host.page.$$('#dropBox .btn');
     ok(btns.length >= 1, 'the host gets "Make X the Runner" buttons (' + btns.length + ')');
     await shot(host.page, '6-drop');
-    await btns[0].click(); await sleep(800);
+    // the countdown ticks while we look: the buttons must survive it
+    const first = await host.page.$('#dropBox .btn');
+    await sleep(2200);
+    ok(await first.evaluate(b => b.isConnected), 'the buttons stay put while the countdown ticks');
+    await host.page.locator('#dropBox .btn').first().click(); await sleep(800);
     const newRunner = tabs.find(t => t !== run2 && t.start.role.isRunner);
     ok(!!newRunner, 'the chosen player is the Runner now (' + (newRunner && newRunner.name) + ')');
     ok(await host.page.isHidden('#dropBox'), 'the drop box goes away');

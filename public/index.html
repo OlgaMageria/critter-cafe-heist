@@ -572,8 +572,10 @@ body.critical #vignette{animation:throb .7s ease-in-out infinite}
     const isHost = lobby.hostId === lobby.you;
     const busy = new Set(runnersInfo.map(r => r.id));
     const cands = lobby.players.filter(p => p.connected && !busy.has(p.id));
-    const key = JSON.stringify([drops.map(d => d.i), cands.map(c => c.id), isHost, S.dl]);
-    if (key === dropKey) return;
+    // the countdown only changes its own text: rebuilding the box every second would swap the buttons under the host's mouse
+    const secs = S.dl != null ? ' The round is called off in ' + S.dl + 's if nobody takes over.' : '';
+    const key = JSON.stringify([drops.map(d => d.i), cands.map(c => c.id), isHost]);
+    if (key === dropKey) { box.querySelectorAll('.secs').forEach(e => { e.textContent = secs; }); return; }
     dropKey = key;
     box.innerHTML = '';
     drops.forEach(d => {
@@ -582,8 +584,9 @@ body.critical #vignette{animation:throb .7s ease-in-out infinite}
       h.innerHTML = '<b></b>';
       h.firstChild.textContent = '🔌 ' + (info.avatar || '') + ' ' + (info.name || 'A Runner') + ' lost their connection.';
       const p = document.createElement('p'); p.className = 'note'; p.style.margin = '4px 0 0';
-      const secs = S.dl != null ? ' The round is called off in ' + S.dl + 's if nobody takes over.' : '';
-      p.textContent = (isHost ? 'Make someone else the Runner (they swap jobs), or wait for them to come back.' : 'Waiting for them to come back, or for the host to pick a new Runner.') + secs;
+      p.textContent = isHost ? 'Make someone else the Runner (they swap jobs), or wait for them to come back.' : 'Waiting for them to come back, or for the host to pick a new Runner.';
+      const sp = document.createElement('span'); sp.className = 'secs'; sp.textContent = secs;
+      p.appendChild(sp);
       box.append(h, p);
       if (isHost) {
         const who = document.createElement('div'); who.className = 'who';
