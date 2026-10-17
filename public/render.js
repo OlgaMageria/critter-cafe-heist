@@ -236,12 +236,63 @@
     }
   }
 
-  function drawGuard(ctx, gx, gy, seen) {
-    const px = gx * T, py = gy * T;
+  // guard modes (same numbers as the server): 0 patrol, 1 chase, 2 investigate, 3 search, 4 return, 5 stunned
+  const GM = { patrol: 0, chase: 1, investigate: 2, search: 3, back: 4, stunned: 5 };
+  // o: { mode, alert, tm }
+  function drawGuard(ctx, gx, gy, o) {
+    o = o || {};
+    const px = gx * T, py = gy * T, tm = o.tm || 0;
+    const m = o.mode || 0;
     ctx.fillStyle = 'rgba(60,40,30,0.25)';
     ctx.beginPath(); ctx.ellipse(px, py + 12, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
-    emoji(ctx, seen ? '😾' : '🐱', px, py, 31);
-    if (seen) emoji(ctx, '❗', px, py - 25, 18);
+    const angry = m === GM.chase || o.alert;
+    // a chasing cat bounces as it runs
+    const bob = m === GM.chase ? Math.abs(Math.sin(tm * 14)) * -4 : 0;
+    emoji(ctx, m === GM.stunned ? '😵' : angry ? '😾' : '🐱', px, py + bob, 31);
+    if (m === GM.chase) emoji(ctx, '‼️', px, py - 26 + bob, 18);
+    else if (m === GM.investigate) emoji(ctx, '👂', px + 14, py - 22, 15);
+    else if (m === GM.search) emoji(ctx, '❓', px, py - 26 + Math.sin(tm * 5) * 2, 17);
+    else if (m === GM.stunned) {
+      for (let k = 0; k < 3; k++) {
+        const a = tm * 5 + k * 2.1;
+        emoji(ctx, '⭐', px + Math.cos(a) * 15, py - 22 + Math.sin(a) * 5, 10);
+      }
+    } else if (o.alert) emoji(ctx, '❗', px, py - 25, 18);
+  }
+
+  // Floating effects for game events: fx = [{x, y, e, t0, big}] (tiles, seconds)
+  const FX_LIFE = 1.6;
+  function drawFx(ctx, fx, now) {
+    (fx || []).forEach(f => {
+      const age = now - f.t0;
+      if (age < 0 || age > FX_LIFE) return;
+      const k = age / FX_LIFE;
+      const px = f.x * T, py = f.y * T - 14 - k * 34;
+      if (f.big) {
+        ctx.strokeStyle = 'rgba(255,90,90,' + (1 - k).toFixed(2) + ')';
+        ctx.lineWidth = 2 + 5 * (1 - k);
+        ctx.beginPath(); ctx.arc(f.x * T, f.y * T, 10 + k * 60, 0, Math.PI * 2); ctx.stroke();
+      }
+      emoji(ctx, f.e, px, py, (f.big ? 30 : 22) * (1 + 0.3 * Math.sin(Math.min(1, age * 4) * Math.PI)), 1 - k * k);
+    });
+  }
+
+  // "E: open the red cupboard" bubble over the Runner
+  function drawPrompt(ctx, p) {
+    if (!p || !p.text) return;
+    const txt = (p.key || 'E') + ': ' + p.text;
+    ctx.save();
+    ctx.font = '600 13px ' + FONT;
+    const w = ctx.measureText(txt).width + 16, h = 22;
+    let x = p.x * T - w / 2, y = p.y * T - 52;
+    x = Math.max(4, Math.min(W - w - 4, x)); y = Math.max(4, y);
+    ctx.globalAlpha = p.done ? 0.75 : 1;
+    ctx.fillStyle = p.done ? '#eee6df' : '#fff7cf';
+    rr(ctx, x, y, w, h, 9); ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(txt, x + w / 2, y + h / 2 + 1);
+    ctx.restore();
   }
 
   // The runners in a view: V.rs = [{x, y, avatar, name, idx, out}] (smoothed positions)
@@ -317,8 +368,12 @@
       const only = lights.filter(r => opts.light.indexOf(r.idx) >= 0);
       if (only.length) lights = only;
     }
-    if (V && lights.some(l => Math.hypot(V.gx - l.x, V.gy - l.y) < R.light + 0.4)) drawGuard(ctx, V.gx, V.gy, S && (S.seen || S.ag));
+    if (V && lights.some(l => Math.hypot(V.gx - l.x, V.gy - l.y) < R.light + 0.4)) {
+      drawGuard(ctx, V.gx, V.gy, { mode: S && S.gm, alert: S && (S.seen || S.ag), tm: V.t });
+    }
+    if (V) drawFx(ctx, V.fx, V.t); // drawn under the darkness: you only see what happens in your light
     drawDarkness(ctx, lights);
+    if (opts && opts.prompt) drawPrompt(ctx, opts.prompt);
   }
 
   // ----- Mapper: the whole room, labels, live runner dots -----
@@ -343,7 +398,9 @@
       ctx.beginPath(); ctx.arc(rn.x * T, rn.y * T, 17, 0, Math.PI * 2); ctx.stroke();
       const carry = !!(S && S.cro && S.car === i);
       drawRunner(ctx, rn, { hid: S && S.rs && S.rs[i] && S.rs[i].h, carry, tm: V && V.t, popAge: carry ? (V && V.pop) : null, tag });
+      if (S && S.rs && S.rs[i] && S.rs[i].c === 0) emoji(ctx, '🔌', rn.x * T + 16, rn.y * T - 18, 16);
     });
+    if (V) drawFx(ctx, (V.fx || []).filter(f => !f.cat), V.t);
   }
 
   // ----- Lookout: furniture as grey blocks, the guard route and/or a fuzzy cat "radar" -----
@@ -403,12 +460,85 @@
         }
       }
       label(ctx, '📡 radar ping every ' + R.radar.every + 's', W / 2, (R.H - 0.5) * T, 11, '#3d7a5a');
-      if (S && S.ag) label(ctx, 'ALERT!', W / 2, 0.55 * T, 14, '#c2410c');
+      const mood = S && { 1: 'CHASING A RUNNER!', 2: 'HEARD A NOISE, GOING TO LOOK', 3: 'SEARCHING', 4: 'WALKING BACK TO ITS ROUTE', 5: 'DAZED' }[S.gm];
+      if (mood) label(ctx, '🐱 ' + mood, W / 2, 0.55 * T, 14, '#c2410c');
+      else if (S && S.ag) label(ctx, 'ALERT!', W / 2, 0.55 * T, 14, '#c2410c');
     }
+  }
+
+  // ----- end-of-round replay: the whole room with everything revealed, trails and events -----
+  // rp: { every, duration, frames: [{t, g: [x, y, mode], r: [[x, y, flags]]}], events, runners, route }
+  // rv: { truth, noteSyms }   flags: 1 hiding, 2 seen, 4 out
+  function frameAt(rp, t) {
+    const fr = rp.frames;
+    if (!fr.length) return null;
+    let lo = 0, hi = fr.length - 1;
+    if (t <= fr[0].t) return Object.assign({ idx: 0 }, fr[0]);
+    if (t >= fr[hi].t) return Object.assign({ idx: hi }, fr[hi]);
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (fr[m].t <= t) lo = m; else hi = m; }
+    const a = fr[lo], b = fr[hi], k = (t - a.t) / ((b.t - a.t) || 1);
+    const mix = (p, q) => p + (q - p) * k;
+    return {
+      idx: lo, t,
+      g: [mix(a.g[0], b.g[0]), mix(a.g[1], b.g[1]), a.g[2]],
+      r: a.r.map((ra, i) => { const rb = b.r[i] || ra; return [mix(ra[0], rb[0]), mix(ra[1], rb[1]), ra[2]]; })
+    };
+  }
+  const REPLAY_FX = { note: '📝', found: '🥐', wrong: '💥', badcode: '🚫', unlock: '🔓', out: '🚪', spotted: '‼️', lost: '❓', pounce: '💥' };
+  function drawReplay(ctx, rp, rv, t) {
+    ctx.clearRect(0, 0, W, H);
+    const evs = rp.events.filter(e => e.at <= t);
+    const ul = evs.some(e => e.k === 'unlock');
+    const foundEv = evs.filter(e => e.k === 'found').pop();
+    drawBase(ctx, false);
+    drawBoxes(ctx, false);
+    drawExit(ctx, { ul, cro: !!foundEv }, true, t);
+    drawNotes(ctx, { nt: rv.noteSyms }, true);
+    const op = {};
+    evs.forEach(e => { if (e.k === 'wrong') op[e.id] = 'empty'; if (e.k === 'found') op[e.id] = 'croissant'; });
+    R.solids.forEach(s => drawSolid(ctx, s, { noEmoji: true, plain: true, label: s.name, opened: op[s.id] }));
+    // the right container glows gold
+    const tr = R.solids.find(s => s.id === rv.truth);
+    if (tr) {
+      ctx.strokeStyle = 'rgba(255,190,40,' + (0.65 + 0.3 * Math.sin(t * 4)).toFixed(2) + ')'; ctx.lineWidth = 5;
+      rr(ctx, tr.x * T - 3, tr.y * T - 3, tr.w * T + 6, tr.h * T + 6, 12); ctx.stroke();
+      emoji(ctx, '🥐', tr.x * T + tr.w * T - 4, tr.y * T + 4, 18);
+    }
+    const f = frameAt(rp, t);
+    if (!f) return;
+    // the cat's last few seconds, dashed red
+    const fr = rp.frames;
+    const g0 = Math.max(0, f.idx - Math.round(6 / (rp.every || 0.25)));
+    ctx.setLineDash([5, 5]); ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(230,60,80,0.55)';
+    ctx.beginPath(); ctx.moveTo(fr[g0].g[0] * T, fr[g0].g[1] * T);
+    for (let i = g0 + 1; i <= f.idx; i++) ctx.lineTo(fr[i].g[0] * T, fr[i].g[1] * T);
+    ctx.lineTo(f.g[0] * T, f.g[1] * T); ctx.stroke(); ctx.setLineDash([]);
+    // every Runner's whole path so far
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    (rp.runners || []).forEach((_, i) => {
+      ctx.strokeStyle = RINGS[i % RINGS.length]; ctx.globalAlpha = 0.75; ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      let pen = false;
+      for (let k = 0; k <= f.idx; k++) {
+        const r = fr[k].r[i]; if (!r || r[2] & 4) { pen = false; continue; }
+        if (pen) ctx.lineTo(r[0] * T, r[1] * T); else { ctx.moveTo(r[0] * T, r[1] * T); pen = true; }
+      }
+      const cur = f.r[i]; if (pen && cur && !(cur[2] & 4)) ctx.lineTo(cur[0] * T, cur[1] * T);
+      ctx.stroke(); ctx.globalAlpha = 1;
+    });
+    drawFx(ctx, evs.filter(e => t - e.at < FX_LIFE).map(e => ({ x: e.x, y: e.y, e: REPLAY_FX[e.k] || '✨', t0: e.at, big: e.k === 'pounce' || e.k === 'wrong' })), t);
+    f.r.forEach((r, i) => {
+      if (r[2] & 4) return;
+      const info = (rp.runners || [])[i] || {};
+      drawRunner(ctx, { x: r[0], y: r[1], avatar: info.avatar, name: info.name, idx: i },
+        { hid: r[2] & 1, carry: !!foundEv && foundEv.i === i, tm: t, tag: true });
+      if (r[2] & 2) emoji(ctx, '👀', r[0] * T - 16, r[1] * T - 18, 14);
+    });
+    drawGuard(ctx, f.g[0], f.g[1], { mode: f.g[2], tm: t });
   }
 
   function setRoom(r) { R = r; }
   function getRoom() { return R; }
 
-  return { T, W, H, drawShared, drawMap, drawLookout, setRoom, getRoom };
+  return { T, W, H, drawShared, drawMap, drawLookout, drawReplay, setRoom, getRoom };
 });

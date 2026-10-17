@@ -28,7 +28,17 @@
     walls: {},
 
     // ----- rules that are the same everywhere -----
-    guard: { speed: 2.2, range: 4.2, half: 0.66 },
+    // the cat patrols its route; when it sees a Runner it runs straight at them (right over the furniture),
+    // when it hears a noise it goes to look, then it searches a moment and walks back to its route
+    guard: {
+      speed: 2.2, range: 4.2, half: 0.66,
+      chaseSpeed: 3.1,       // still slower than a Runner, so you can get away
+      investigateSpeed: 2.9,
+      returnSpeed: 2.6,
+      searchTime: 3,         // seconds it looks around where it lost you / heard the noise
+      pounceRange: 0.55,     // this close while chasing = pounce
+      pounceStun: 2          // seconds the cat sits dazed after a pounce
+    },
     runner: { speed: 3.8, half: 0.28 },
     light: 2.8,
     interactRange: 1.35,
@@ -48,6 +58,12 @@
     wrongPenalty: 25,
     alertSeconds: 8,
     alertSpeed: 1.6,
-    alertRangeBonus: 0.8
+    alertRangeBonus: 0.8,
+    // the cat caught up with a Runner
+    pouncePenalty: 30,
+    // a Runner who loses their connection: the host can hand the critter to someone else;
+    // if nobody takes over within this many seconds, the round is called off
+    dropSeconds: 60,
+    maxPlayers: 15
   };
 });

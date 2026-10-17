@@ -1,12 +1,23 @@
 {
   "name": "critter-cafe-heist",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "A co-op coffee-break game for remote teams",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test/sim.js",
+    "test:quick": "node test/sim.js --quick",
+    "test:unit": "node test/sim.js --unit",
+    "test:ui": "node test/ui.js",
+    "test:all": "node test/sim.js && node test/ui.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
